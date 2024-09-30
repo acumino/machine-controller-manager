@@ -2,12 +2,14 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-
 // Package validation is used to validate all the machine CRD objects
 package validation
 
 import (
+	"fmt"
+
 	"github.com/gardener/machine-controller-manager/pkg/apis/machine"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
@@ -29,8 +31,9 @@ func validateMachineDeploymentSpec(spec *machine.MachineDeploymentSpec, fldPath 
 		allErrs = append(allErrs, field.Required(fldPath.Child("replicas"), "Replicas has to be a whole number"))
 	}
 
-	if spec.Strategy.Type != "RollingUpdate" && spec.Strategy.Type != "Recreate" {
-		allErrs = append(allErrs, field.Required(fldPath.Child("strategy.type"), "Type can either be RollingUpdate or Recreate"))
+	strategy := sets.New[machine.MachineDeploymentStrategyType](machine.RecreateMachineDeploymentStrategyType, machine.RollingUpdateMachineDeploymentStrategyType, machine.InPlaceMachineDeploymentStrategyType)
+	if !strategy.Has(spec.Strategy.Type) {
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("strategy.type"), spec.Strategy.Type, fmt.Sprintf("strategy type must be one of %v", strategy.UnsortedList())))
 	}
 
 	for k, v := range spec.Selector.MatchLabels {
