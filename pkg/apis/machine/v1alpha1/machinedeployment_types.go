@@ -125,8 +125,8 @@ const (
 	// RollingUpdateMachineDeploymentStrategyType means that old MCs will be replaced by new one using rolling update i.e gradually scale down the old MCs and scale up the new one.
 	RollingUpdateMachineDeploymentStrategyType MachineDeploymentStrategyType = "RollingUpdate"
 
-	// InPlaceMachineDeploymentStrategyType means that old MCs will get updated by using rolling update i.e gradually allow update on the machine.
-	InPlaceMachineDeploymentStrategyType MachineDeploymentStrategyType = "InPlace"
+	// InPlaceUpdateMachineDeploymentStrategyType means that old MCs will get updated by using rolling update i.e gradually allow update on the machine.
+	InPlaceUpdateMachineDeploymentStrategyType MachineDeploymentStrategyType = "InPlace"
 )
 
 // RollingUpdateMachineDeployment is the spec to control the desired behavior of rolling update.

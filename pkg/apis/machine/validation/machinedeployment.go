@@ -31,7 +31,7 @@ func validateMachineDeploymentSpec(spec *machine.MachineDeploymentSpec, fldPath 
 		allErrs = append(allErrs, field.Required(fldPath.Child("replicas"), "Replicas has to be a whole number"))
 	}
 
-	strategy := sets.New[machine.MachineDeploymentStrategyType](machine.RecreateMachineDeploymentStrategyType, machine.RollingUpdateMachineDeploymentStrategyType, machine.InPlaceMachineDeploymentStrategyType)
+	strategy := sets.New[machine.MachineDeploymentStrategyType](machine.RecreateMachineDeploymentStrategyType, machine.RollingUpdateMachineDeploymentStrategyType, machine.InPlaceUpdateMachineDeploymentStrategyType)
 	if !strategy.Has(spec.Strategy.Type) {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("strategy.type"), spec.Strategy.Type, fmt.Sprintf("strategy type must be one of %v", strategy.UnsortedList())))
 	}
