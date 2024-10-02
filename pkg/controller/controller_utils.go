@@ -482,13 +482,13 @@ var _ MachineControlInterface = &RealMachineControl{}
 
 // MachineControlInterface is the interface used by the machine-set controller to interact with the machine controller
 type MachineControlInterface interface {
-	// Createmachines creates new machines according to the spec.
+	// CreateMachines creates new machines according to the spec.
 	CreateMachines(ctx context.Context, namespace string, template *v1alpha1.MachineTemplateSpec, object runtime.Object) error
-	// CreatemachinesWithControllerRef creates new machines according to the spec, and sets object as the machine's controller.
+	// CreateMachinesWithControllerRef creates new machines according to the spec, and sets object as the machine's controller.
 	CreateMachinesWithControllerRef(ctx context.Context, namespace string, template *v1alpha1.MachineTemplateSpec, object runtime.Object, controllerRef *metav1.OwnerReference) error
-	// Deletemachine deletes the machine identified by machineID.
+	// DeleteMachine deletes the machine identified by machineID.
 	DeleteMachine(ctx context.Context, namespace string, machineID string, object runtime.Object) error
-	// Patchmachine patches the machine.
+	// PatchMachine patches the machine.
 	PatchMachine(ctx context.Context, namespace string, name string, data []byte) error
 }
 
