@@ -540,7 +540,7 @@ func (dc *controller) getMachinesForDrained(is *v1alpha1.MachineSet, readyForDra
 	return machines, nil
 }
 
-func (dc *controller) cordonAndDrain(ctx context.Context, is *v1alpha1.MachineSet, newScale int32) error {
+func (dc *controller) pickMachineToPrepareforUpdate(ctx context.Context, is *v1alpha1.MachineSet, newScale int32) error {
 	readyForDrained := is.Spec.Replicas - newScale
 
 	machines, err := dc.getMachinesForDrained(is, readyForDrained)

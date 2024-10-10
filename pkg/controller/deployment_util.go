@@ -1105,13 +1105,9 @@ func NewISNewReplicas(deployment *v1alpha1.MachineDeployment, allISs []*v1alpha1
 	case v1alpha1.RecreateMachineDeploymentStrategyType:
 		return (deployment.Spec.Replicas), nil
 	case v1alpha1.InPlaceUpdateMachineDeploymentStrategyType:
-		// Check if we can scale up.
-		maxUnavailable, err := intstrutil.GetValueFromIntOrPercent(deployment.Spec.Strategy.RollingUpdate.MaxUnavailable, int((deployment.Spec.Replicas)), true)
-		if err != nil {
-			return 0, err
-		}
-		// return sum of current avialable replicas and max unavailable
-		return (newIS.Spec.Replicas) + int32(maxUnavailable), nil
+		// when newIs is created, its replicas should be zero as it will have machines only after the old machines are updated and
+		// moved to the new machine set
+		return 0, nil
 	default:
 		return 0, fmt.Errorf("machine deployment type %v isn't supported", deployment.Spec.Strategy.Type)
 	}
