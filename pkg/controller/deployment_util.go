@@ -1104,6 +1104,14 @@ func NewISNewReplicas(deployment *v1alpha1.MachineDeployment, allISs []*v1alpha1
 		return (newIS.Spec.Replicas) + scaleUpCount, nil
 	case v1alpha1.RecreateMachineDeploymentStrategyType:
 		return (deployment.Spec.Replicas), nil
+	case v1alpha1.InPlaceUpdateMachineDeploymentStrategyType:
+		// Check if we can scale up.
+		maxUnavailable, err := intstrutil.GetValueFromIntOrPercent(deployment.Spec.Strategy.RollingUpdate.MaxUnavailable, int((deployment.Spec.Replicas)), true)
+		if err != nil {
+			return 0, err
+		}
+		// return sum of current avialable replicas and max unavailable
+		return (newIS.Spec.Replicas) + int32(maxUnavailable), nil
 	default:
 		return 0, fmt.Errorf("machine deployment type %v isn't supported", deployment.Spec.Strategy.Type)
 	}

@@ -20,8 +20,19 @@ var (
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// GroupName is the group name use in this package
-const GroupName = "machine.sapcloud.io"
+const (
+	// GroupName is the group name use in this package
+	GroupName = "machine.sapcloud.io"
+
+	// LabelKeyMachinePrepareForUpdate is the label key for the machine indicating the machine is prepared for update.
+	LabelKeyMachinePrepareForUpdate = "machine.sapcloud.io/prepare-for-update"
+	// LabelKeyMachineClass is the label key for the machine indicating the machine is ready for update.
+	LabelKeyMachineIsReadyForUpdate = "machine.sapcloud.io/is-ready-for-update"
+	// LabelKeyMachineUpdateSuccessful is the label key for the machine indicating the machine update was successful.
+	LabelKeyMachineUpdateSuccessful = "machine.sapcloud.io/update-successful"
+	// LabelKeyMachineUpdateFailed is the label key for the machine indicating the machine update failed.
+	LabelKeyMachineUpdateFailed = "machine.sapcloud.io/update-failed"
+)
 
 // SchemeGroupVersion is group version used to register these objects
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}

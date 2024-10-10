@@ -34,6 +34,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/rand"
@@ -525,6 +526,39 @@ func (dc *controller) scaleMachineSetsProportionally(allISs []*v1alpha1.MachineS
 	}
 
 	return nameToSize, deploymentReplicasAdded
+}
+
+func (dc *controller) getMachinesForDrained(is *v1alpha1.MachineSet, readyForDrained int32) ([]*v1alpha1.Machine, error) {
+	machines, err := dc.machineLister.List(labels.SelectorFromSet(is.Spec.Selector.MatchLabels))
+	if err != nil {
+		return nil, err
+	}
+	// Get readyForDrained count of machines from the machine set randomly.
+	if len(machines) > int(readyForDrained) {
+		return machines[:readyForDrained], nil
+	}
+	return machines, nil
+}
+
+func (dc *controller) cordonAndDrain(ctx context.Context, is *v1alpha1.MachineSet, newScale int32) error {
+	readyForDrained := is.Spec.Replicas - newScale
+
+	machines, err := dc.getMachinesForDrained(is, readyForDrained)
+	if err != nil {
+		return err
+	}
+
+	for _, machine := range machines {
+		addLabelPatch := fmt.Sprintf(
+			`{"metadata":{"labels: {%s: %s}"`, v1alpha1.LabelKeyMachinePrepareForUpdate, "true")
+		// based on this label, the machine-controller will cordon and drain the machine. MCM proviers will do this work.
+		err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addLabelPatch))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (dc *controller) scaleMachineSetAndRecordEvent(ctx context.Context, is *v1alpha1.MachineSet, newScale int32, deployment *v1alpha1.MachineDeployment) (bool, *v1alpha1.MachineSet, error) {
