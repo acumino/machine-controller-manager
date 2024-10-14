@@ -618,7 +618,7 @@ func SetReplicasAnnotations(is *v1alpha1.MachineSet, desiredReplicas, maxReplica
 
 // MaxUnavailable returns the maximum unavailable machines a rolling deployment can take.
 func MaxUnavailable(deployment v1alpha1.MachineDeployment) int32 {
-	if !IsRollingUpdate(&deployment) || (deployment.Spec.Replicas) == 0 {
+	if !IsRollingUpdate(&deployment) && !IsInPlaceUpdate(&deployment) || (deployment.Spec.Replicas) == 0 {
 		return int32(0)
 	}
 	// Error caught by validation
@@ -1001,6 +1001,11 @@ func GetAvailableReplicaCountForMachineSets(MachineSets []*v1alpha1.MachineSet) 
 // IsRollingUpdate returns true if the strategy type is a rolling update.
 func IsRollingUpdate(deployment *v1alpha1.MachineDeployment) bool {
 	return deployment.Spec.Strategy.Type == v1alpha1.RollingUpdateMachineDeploymentStrategyType
+}
+
+// IsInPlaceUpdate returns true if the strategy type is a inplace update.
+func IsInPlaceUpdate(deployment *v1alpha1.MachineDeployment) bool {
+	return deployment.Spec.Strategy.Type == v1alpha1.InPlaceUpdateMachineDeploymentStrategyType
 }
 
 // MachineDeploymentComplete considers a deployment to be complete once all of its desired replicas
