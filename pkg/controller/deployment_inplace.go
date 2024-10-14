@@ -218,6 +218,9 @@ func (dc *controller) reconcileOldMachineSetsInPlace(ctx context.Context, allISs
 	if err != nil {
 		return false, err
 	}
+
+	klog.V(3).Infof("some data allMachinesCount:%d,  minAvailable:%d,  newISUnavailableMachineCount:%d,  oldISsMachineInUpdateProcess:%d", allMachinesCount, minAvailable, newISUnavailableMachineCount, oldISsMachineInUpdateProcess)
+
 	maxUpdatePossible := allMachinesCount - minAvailable - newISUnavailableMachineCount - oldISsMachineInUpdateProcess
 	if maxUpdatePossible <= 0 {
 		return false, nil
