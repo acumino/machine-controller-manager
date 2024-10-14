@@ -223,6 +223,7 @@ func (dc *controller) reconcileOldMachineSetsInPlace(ctx context.Context, allISs
 		return false, nil
 	}
 
+	klog.V(3).Infof("call prepareMachineForUpdate, maxUpdatePossible %d", maxUpdatePossible)
 	// preapre machine from old machine sets for get updated, need check maxUnavailable to ensure we can select machines for update.
 	allISs = append(oldISs, newIS)
 	machineSelectedForUpdate, err := dc.prepareMachineForUpdate(ctx, allISs, oldISs, deployment)
@@ -298,6 +299,7 @@ func (dc *controller) getMachineInUpdateProcess(oldISs []*v1alpha1.MachineSet) (
 }
 
 func (dc *controller) prepareMachineForUpdate(ctx context.Context, allISs []*v1alpha1.MachineSet, oldISs []*v1alpha1.MachineSet, deployment *v1alpha1.MachineDeployment) (int32, error) {
+	klog.V(3).Infof("inside prepareMachineForUpdate")
 	maxUnavailable := MaxUnavailable(*deployment)
 
 	// TODO: here also consider machine under the update. - done
@@ -330,6 +332,8 @@ func (dc *controller) prepareMachineForUpdate(ctx context.Context, allISs []*v1a
 		// prepare for update
 		readyForUpdateCount := int32(integer.IntMin(int((targetIS.Spec.Replicas)), int(totalReadyForUpdateCount-totalReadyForUpdate)))
 		newReplicasCount := (targetIS.Spec.Replicas) - readyForUpdateCount
+
+		klog.V(3).Infof("call pickMachineToPrepareforUpdate, newReplicasCount %d", newReplicasCount)
 		if newReplicasCount > (targetIS.Spec.Replicas) {
 			return 0, fmt.Errorf("when selecting machine from old IS for update, got invalid request %s %d -> %d", targetIS.Name, (targetIS.Spec.Replicas), newReplicasCount)
 		}

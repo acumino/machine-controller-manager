@@ -543,15 +543,21 @@ func (dc *controller) getMachinesForDrained(is *v1alpha1.MachineSet, readyForDra
 func (dc *controller) pickMachineToPrepareforUpdate(ctx context.Context, is *v1alpha1.MachineSet, newScale int32) error {
 	readyForDrained := is.Spec.Replicas - newScale
 
+	klog.V(3).Infof("inside pickMachineToPrepareforUpdate, readyForDrained %d", readyForDrained)
+
 	machines, err := dc.getMachinesForDrained(is, readyForDrained)
 	if err != nil {
 		return err
 	}
 
+	klog.V(3).Infof("machines selected for drain %v", machines)
+
 	for _, machine := range machines {
+		labels := MergeStringMaps(machine.Labels, map[string]string{v1alpha1.LabelKeyMachinePrepareForUpdate: "true"})
 		addLabelPatch := fmt.Sprintf(
-			`{"metadata":{"labels: {%s: %s}"`, v1alpha1.LabelKeyMachinePrepareForUpdate, "true")
+			`{"metadata":{"labels: %s"`, labels)
 		// based on this label, the machine-controller will cordon and drain the machine. MCM proviers will do this work.
+		klog.V(0).Infof("added label to start prepare for update %s", labels)
 		err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addLabelPatch))
 		if err != nil {
 			return err
