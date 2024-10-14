@@ -126,9 +126,9 @@ func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs 
 			return false, nil
 		}
 
-		// select the nodes which has been updated successfully and belongs to this machine set.
-		// I am  hoping machine lable selector goes on the nodes
-		nodes, err := dc.nodeLister.List(labels.SelectorFromSet(MergeStringMaps(is.Spec.Selector.MatchLabels, map[string]string{v1alpha1.LabelKeyMachineUpdateSuccessful: "true"})))
+		// select the nodes which has been updated successfully.
+		// I am  hoping machine lable selector goes on the nodes // it doesn't
+		nodes, err := dc.nodeLister.List(labels.SelectorFromSet(map[string]string{v1alpha1.LabelKeyMachineUpdateSuccessful: "true"}))
 		if err != nil {
 			return false, nil
 		}
@@ -141,7 +141,10 @@ func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs 
 
 			// get the machine from the node.
 			// error need to be handled.
-			machine, _ := getMachineNameFromNode(machines, node)
+			machine, err := getMachineNameFromNode(machines, node)
+			if err != nil {
+				continue
+			}
 			// removes labels not present in newIS so that the machine is not selected by the old machine set
 			// TODO : will have to update labels on the node maybe or MCM will do itself after the ownerreference update.
 			machineNewLabels := OverwritePresentDropNotPresent(machine.Labels, is.Spec.Selector.MatchLabels, newIS.Spec.Selector.MatchLabels)
@@ -152,7 +155,7 @@ func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs 
 				`{"metadata":{"ownerReferences":[{"apiVersion":"machine.sapcloud.io/v1alpha1","kind":"%s","name":"%s","uid":"%s","controller":true,"blockOwnerDeletion":true}],"labels":%s,"uid":"%s"}}`,
 				v1alpha1.SchemeGroupVersion.WithKind("MachineSet"),
 				newIS.GetName(), newIS.GetUID(), machineNewLabels, machine.UID)
-			err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addControllerPatch))
+			err = dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addControllerPatch))
 
 			// what if there is no error can it lead to machine deletion in the new machine set since the set will have more replicas.
 			// the set in the replica field in the machine set.
