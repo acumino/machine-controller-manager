@@ -179,6 +179,27 @@ func (c *controller) reconcileClusterMachine(ctx context.Context, machine *v1alp
 			return retry, err
 		}
 	}
+
+	// need to check what point this code should be added
+	if machine.Labels[v1alpha1.LabelKeyMachinePrepareForUpdate] == "true" {
+		if strings.Contains(machine.Status.LastOperation.Description, machineutils.NodeReadyForUpdate) {
+			// if node doesn't have label ready for update then add it
+			nodeName := getNodeName(machine)
+			node, err := c.nodeLister.Get(nodeName)
+			if err != nil {
+				return machineutils.ConflictRetry, err
+			}
+			if node.Labels[v1alpha1.LabelKeyMachineIsReadyForUpdate] != "true" {
+				return c.addLabelToNode(ctx, machine)
+			}
+
+			// give machine time for it to get ready for get updated.
+			return machineutils.LongRetry, nil
+		}
+		// trigger drain of the machine/node
+		return c.drainNodeForInPlace(ctx, machine)
+	}
+
 	if machine.Spec.ProviderID == "" || machine.Status.CurrentStatus.Phase == "" || machine.Status.CurrentStatus.Phase == v1alpha1.MachineCrashLoopBackOff {
 		return c.triggerCreationFlow(
 			ctx,
