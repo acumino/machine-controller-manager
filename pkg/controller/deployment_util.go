@@ -626,6 +626,8 @@ func MaxUnavailable(deployment v1alpha1.MachineDeployment) int32 {
 	if maxUnavailable > deployment.Spec.Replicas {
 		return deployment.Spec.Replicas
 	}
+
+	klog.V(3).Infof("maxUnavailable %d", maxUnavailable)
 	return maxUnavailable
 }
 
