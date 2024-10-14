@@ -11,6 +11,7 @@ import (
 
 	"github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1"
 	"github.com/gardener/machine-controller-manager/pkg/controller/autoscaler"
+	"github.com/gardener/machine-controller-manager/pkg/util/provider/machineutils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -76,6 +77,16 @@ func (dc *controller) rolloutInplace(ctx context.Context, d *v1alpha1.MachineDep
 	// here it need to be taken care that, while owner ship is being transferred, the machine should not be deleted
 	// and the old machine set should not be scaled up to create the machine again.
 
+	// Scale up, if we can.
+	scaledUp, err := dc.reconcileNewMachineSetInPlace(ctx, oldISs, newIS, d)
+	if err != nil {
+		return err
+	}
+	if scaledUp {
+		// Update DeploymentStatus
+		return dc.syncRolloutStatus(ctx, allISs, newIS, d)
+	}
+
 	if MachineDeploymentComplete(d, &d.Status) {
 		if dc.autoscalerScaleDownAnnotationDuringRollout {
 			// Check if any of the machine under this MachineDeployment contains the by-mcm annotation, and
@@ -92,6 +103,100 @@ func (dc *controller) rolloutInplace(ctx context.Context, d *v1alpha1.MachineDep
 
 	// Sync deployment status
 	return dc.syncRolloutStatus(ctx, allISs, newIS, d)
+}
+
+func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs []*v1alpha1.MachineSet, newIS *v1alpha1.MachineSet, deployment *v1alpha1.MachineDeployment) (bool, error) {
+	if (newIS.Spec.Replicas) == (deployment.Spec.Replicas) {
+		// Scaling not required.
+		return false, nil
+	}
+	if (newIS.Spec.Replicas) > (deployment.Spec.Replicas) {
+		// Scale down.
+		scaled, _, err := dc.scaleMachineSetAndRecordEvent(ctx, newIS, (deployment.Spec.Replicas), deployment)
+		return scaled, err
+	}
+
+	addedNewReplicasCount := int32(0)
+
+	for _, is := range oldISs {
+		transfferedMachineCount := int32(0)
+		// get the machines for the machine set.
+		machines, err := dc.machineLister.List(labels.SelectorFromSet(is.Spec.Selector.MatchLabels))
+		if err != nil {
+			return false, nil
+		}
+
+		// select the nodes which has been updated successfully and belongs to this machine set.
+		// I am  hoping machine lable selector goes on the nodes
+		nodes, err := dc.nodeLister.List(labels.SelectorFromSet(MergeStringMaps(is.Spec.Selector.MatchLabels, map[string]string{v1alpha1.LabelKeyMachineUpdateSuccessful: "true"})))
+		if err != nil {
+			return false, nil
+		}
+
+		for _, node := range nodes {
+			// here change the labels on the machine to add the new machine set label.
+			// and remove the old machine set label.
+			// also change the owner reference of the machine to the new machine set.
+			// down scale the old machine set.
+
+			// get the machine from the node.
+			// error need to be handled.
+			machine, _ := getMachineNameFromNode(machines, node)
+			// removes labels not present in newIS so that the machine is not selected by the old machine set
+			// TODO : will have to update labels on the node maybe or MCM will do itself after the ownerreference update.
+			machineNewLabels := OverwritePresentDropNotPresent(machine.Labels, is.Spec.Selector.MatchLabels, newIS.Spec.Selector.MatchLabels)
+
+			// TODO: here add label patch also or do and update call maybe. // done need to test
+			// should be all done in one call that for sure
+			addControllerPatch := fmt.Sprintf(
+				`{"metadata":{"ownerReferences":[{"apiVersion":"machine.sapcloud.io/v1alpha1","kind":"%s","name":"%s","uid":"%s","controller":true,"blockOwnerDeletion":true}],"labels":%s,"uid":"%s"}}`,
+				v1alpha1.SchemeGroupVersion.WithKind("MachineSet"),
+				newIS.GetName(), newIS.GetUID(), machineNewLabels, machine.UID)
+			err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addControllerPatch))
+
+			// what if there is no error can it lead to machine deletion in the new machine set since the set will have more replicas.
+			// the set in the replica field in the machine set.
+			// mostly will have to adapt the logic that during the inplace take care of these stuff.
+			// which can lead to scary situations.
+			if err != nil {
+				scaled, _, err2 := dc.scaleMachineSetAndRecordEvent(ctx, newIS, newIS.Spec.Replicas+addedNewReplicasCount, deployment)
+				// if things get errored here can it lead to machine deletion
+				// not sure mostly not since the owner reference is not updated.
+				// and no is has been scaled up or down.
+				if err2 != nil {
+					return addedNewReplicasCount > 0, err2
+				}
+				return scaled, err
+			}
+
+			transfferedMachineCount++ // scale down the old machine set.
+			addedNewReplicasCount++   // scale up the new machine set.
+		}
+
+		// TODO: add the logic to down scale the old machiene set.
+		// can we safely do it, can it lead to machine deletion.
+		// but since(maybe) the machine has been shifted to the new machine set, it should be safe to do it.
+		_, _, err = dc.scaleMachineSetAndRecordEvent(ctx, is, is.Spec.Replicas-transfferedMachineCount, deployment)
+		if err != nil {
+			return addedNewReplicasCount > 0, err
+		}
+	}
+
+	scaled, _, err := dc.scaleMachineSetAndRecordEvent(ctx, newIS, newIS.Spec.Replicas+addedNewReplicasCount, deployment)
+	return scaled, err
+}
+
+func getMachineNameFromNode(machines []*v1alpha1.Machine, node *v1.Node) (*v1alpha1.Machine, error) {
+	for _, machine := range machines {
+		machineName, ok := node.Labels[machineutils.MachineLabelKey]
+		if !ok || machineName != machine.Name {
+			continue
+		}
+
+		return machine, nil
+	}
+
+	return nil, fmt.Errorf("machine not found for node %s", node.Name)
 }
 
 // TODO: during the change of the ownership of the machine, scale or delete of machine issue can occur.
@@ -126,6 +231,23 @@ func (dc *controller) reconcileOldMachineSetsInPlace(ctx context.Context, allISs
 	}
 
 	return machineSelectedForUpdate > 0, nil
+}
+
+// OverwritePresentDropNotPresent returns a map with the keys present in newIS and current, and the values from newIS.
+func OverwritePresentDropNotPresent[T any](current, oldIS, newIS map[string]T) map[string]T {
+	out := make(map[string]T, len(newIS))
+
+	for k := range newIS {
+		out[k] = newIS[k]
+	}
+
+	for k := range current {
+		if _, ok := oldIS[k]; !ok {
+			out[k] = current[k]
+		}
+	}
+
+	return out
 }
 
 // MergeStringMaps merges the content of the newMaps with the oldMap. If a key already exists then
