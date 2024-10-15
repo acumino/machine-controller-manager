@@ -234,7 +234,7 @@ func (dc *controller) reconcileOldMachineSetsInPlace(ctx context.Context, allISs
 	allISs = append(oldISs, newIS)
 	machineSelectedForUpdate, err := dc.prepareMachineForUpdate(ctx, allISs, oldISs, deployment)
 	if err != nil {
-		return false, nil
+		return false, err
 	}
 
 	return machineSelectedForUpdate > 0, nil
