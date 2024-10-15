@@ -13,6 +13,7 @@ import (
 	"github.com/gardener/machine-controller-manager/pkg/controller/autoscaler"
 	"github.com/gardener/machine-controller-manager/pkg/util/provider/machineutils"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -193,6 +194,13 @@ func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs 
 				return scaled, err
 			}
 
+			// here uncordon the node **
+			node.Spec.Unschedulable = false
+			_, err = dc.controlCoreClient.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+			if err != nil {
+				return false, fmt.Errorf("failed to uncordon the node %s", node.Name)
+			}
+
 			transfferedMachineCount++ // scale down the old machine set.
 			addedNewReplicasCount++   // scale up the new machine set.
 		}
@@ -226,6 +234,7 @@ func getMachineNameFromNode(machines []*v1alpha1.Machine, node *v1.Node) (*v1alp
 	return nil, fmt.Errorf("machine not found for node %s", node.Name)
 }
 
+// TODO: handle the failed to update nodes.
 // TODO: during the change of the ownership of the machine, scale or delete of machine issue can occur.
 // TODO: Will have to add the logic for `prepare for update`/`ready for update` machins should be counted in the not ready replicas. - done
 func (dc *controller) reconcileOldMachineSetsInPlace(ctx context.Context, allISs []*v1alpha1.MachineSet, oldISs []*v1alpha1.MachineSet, newIS *v1alpha1.MachineSet, deployment *v1alpha1.MachineDeployment) (bool, error) {
