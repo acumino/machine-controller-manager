@@ -555,19 +555,6 @@ func (dc *controller) pickMachineToPrepareforUpdate(ctx context.Context, is *v1a
 	for _, machine := range machines {
 		labels := MergeStringMaps(machine.Labels, map[string]string{v1alpha1.LabelKeyMachinePrepareForUpdate: "true"})
 
-		// mc := &machinev1alpha1.Machine{
-		// 	ObjectMeta: metav1.ObjectMeta{
-		// 		Labels: labels,
-		// 	},
-		// }
-
-		// mcPatch, err := json.Marshal(mc)
-		// if err != nil {
-		// 	return err
-		// }
-
-		// klog.V(3).Infof("mcPatch %s", mcPatch)
-
 		// Construct the labels string for the patch
 		labelString := ""
 		for key, value := range labels {
