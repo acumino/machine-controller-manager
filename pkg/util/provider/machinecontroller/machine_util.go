@@ -1139,7 +1139,7 @@ func (c *controller) drainNodeForInPlace(ctx context.Context, machine *v1alpha1.
 	if skipDrain {
 		state = v1alpha1.MachineStateProcessing
 	} else {
-		timeOutOccurred = utiltime.HasTimeOutOccurred(*machine.DeletionTimestamp, timeOutDuration)
+		timeOutOccurred = utiltime.HasTimeOutOccurred(machine.Status.LastOperation.LastUpdateTime, timeOutDuration)
 
 		if forceDeleteLabelPresent || timeOutOccurred {
 			// To perform forceful machine drain/delete either one of the below conditions must be satified
