@@ -24,6 +24,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -554,13 +555,25 @@ func (dc *controller) pickMachineToPrepareforUpdate(ctx context.Context, is *v1a
 
 	for _, machine := range machines {
 		labels := MergeStringMaps(machine.Labels, map[string]string{v1alpha1.LabelKeyMachinePrepareForUpdate: "true"})
+
+		metadata := metav1.ObjectMeta{
+			Labels: labels,
+		}
+
+		metadataPatch, err := json.Marshal(metadata)
+		if err != nil {
+			return err
+		}
+
+		klog.V(3).Infof("metadataPatch %s", metadataPatch)
+
 		addLabelPatch := fmt.Sprintf(
-			`{"metadata":{"labels": "%v"`, labels)
+			`{"metadata":{"labels": "%s"}}`, labels)
 		// based on this label, the machine-controller will cordon and drain the machine. MCM proviers will do this work.
 		klog.V(3).Infof("addedLabelPatch %s", addLabelPatch)
 		klog.V(3).Infof("added label to start prepare for update %s", labels)
-		err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addLabelPatch))
-		if err != nil {
+		if err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addLabelPatch)); err != nil {
+			klog.V(3).Infof("error while adding label to start prepare for update %s", err)
 			return err
 		}
 		klog.V(3).Infof("machine labels after patching: %v", machine.Labels)
