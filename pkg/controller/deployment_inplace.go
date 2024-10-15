@@ -80,6 +80,7 @@ func (dc *controller) rolloutInplace(ctx context.Context, d *v1alpha1.MachineDep
 	// Scale up, if we can.
 	scaledUp, err := dc.reconcileNewMachineSetInPlace(ctx, oldISs, newIS, d)
 	if err != nil {
+		klog.V(3).Infof("this was unexpected error")
 		return err
 	}
 	if scaledUp {
@@ -116,6 +117,8 @@ func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs 
 		return scaled, err
 	}
 
+	klog.V(3).Infof("reconcile New machine set")
+
 	addedNewReplicasCount := int32(0)
 
 	for _, is := range oldISs {
@@ -126,12 +129,16 @@ func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs 
 			return false, nil
 		}
 
+		klog.V(3).Infof("machine in old machine set %s: %d", is.Name, len(machines))
+
 		// select the nodes which has been updated successfully.
 		// I am  hoping machine lable selector goes on the nodes // it doesn't
 		nodes, err := dc.nodeLister.List(labels.SelectorFromSet(map[string]string{v1alpha1.LabelKeyMachineUpdateSuccessful: "true"}))
 		if err != nil {
 			return false, nil
 		}
+
+		klog.V(3).Infof("updated nodes %v: %d", nodes, len(nodes))
 
 		for _, node := range nodes {
 			// here change the labels on the machine to add the new machine set label.
@@ -145,16 +152,27 @@ func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs 
 			if err != nil {
 				continue
 			}
+
+			klog.V(3).Infof("found machine for updated node, machine: %s, node: %s", machine.Name, node.Name)
+
 			// removes labels not present in newIS so that the machine is not selected by the old machine set
 			// TODO : will have to update labels on the node maybe or MCM will do itself after the ownerreference update.
 			machineNewLabels := OverwritePresentDropNotPresent(machine.Labels, is.Spec.Selector.MatchLabels, newIS.Spec.Selector.MatchLabels)
 
+			// Construct the labels string for the patch
+			labelString := ""
+			for key, value := range machineNewLabels {
+				labelString += fmt.Sprintf(`"%s":"%s",`, key, value)
+			}
+			// Remove the trailing comma
+			labelString = labelString[:len(labelString)-1]
+
 			// TODO: here add label patch also or do and update call maybe. // done need to test
 			// should be all done in one call that for sure
 			addControllerPatch := fmt.Sprintf(
-				`{"metadata":{"ownerReferences":[{"apiVersion":"machine.sapcloud.io/v1alpha1","kind":"%s","name":"%s","uid":"%s","controller":true,"blockOwnerDeletion":true}],"labels":%s,"uid":"%s"}}`,
+				`{"metadata":{"ownerReferences":[{"apiVersion":"machine.sapcloud.io/v1alpha1","kind":"%s","name":"%s","uid":"%s","controller":true,"blockOwnerDeletion":true}],"labels":{%s},"uid":"%s"}}`,
 				v1alpha1.SchemeGroupVersion.WithKind("MachineSet"),
-				newIS.GetName(), newIS.GetUID(), machineNewLabels, machine.UID)
+				newIS.GetName(), newIS.GetUID(), labelString, machine.UID)
 			err = dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addControllerPatch))
 
 			// what if there is no error can it lead to machine deletion in the new machine set since the set will have more replicas.
@@ -162,10 +180,13 @@ func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs 
 			// mostly will have to adapt the logic that during the inplace take care of these stuff.
 			// which can lead to scary situations.
 			if err != nil {
+				klog.V(3).Infof("patch failed %s", err)
 				scaled, _, err2 := dc.scaleMachineSetAndRecordEvent(ctx, newIS, newIS.Spec.Replicas+addedNewReplicasCount, deployment)
 				// if things get errored here can it lead to machine deletion
 				// not sure mostly not since the owner reference is not updated.
 				// and no is has been scaled up or down.
+				klog.V(3).Infof("scale up after failure failed %s", err2)
+				klog.V(3).Infof("scale up replica count after failure %d", addedNewReplicasCount)
 				if err2 != nil {
 					return addedNewReplicasCount > 0, err2
 				}
@@ -179,12 +200,15 @@ func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs 
 		// TODO: add the logic to down scale the old machiene set.
 		// can we safely do it, can it lead to machine deletion.
 		// but since(maybe) the machine has been shifted to the new machine set, it should be safe to do it.
+		klog.V(3).Infof("old machine set should be scaled down %s, transffered replicas %d", is.Name, transfferedMachineCount)
 		_, _, err = dc.scaleMachineSetAndRecordEvent(ctx, is, is.Spec.Replicas-transfferedMachineCount, deployment)
 		if err != nil {
+			klog.V(3).Infof("scale down failed %s", err)
 			return addedNewReplicasCount > 0, err
 		}
 	}
 
+	klog.V(3).Infof("scale up replica success %d", addedNewReplicasCount)
 	scaled, _, err := dc.scaleMachineSetAndRecordEvent(ctx, newIS, newIS.Spec.Replicas+addedNewReplicasCount, deployment)
 	return scaled, err
 }
