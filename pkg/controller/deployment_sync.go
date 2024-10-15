@@ -31,6 +31,7 @@ import (
 	"strconv"
 
 	"github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1"
+	machinev1alpha1 "github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1"
 	labelsutil "github.com/gardener/machine-controller-manager/pkg/util/labels"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -556,23 +557,25 @@ func (dc *controller) pickMachineToPrepareforUpdate(ctx context.Context, is *v1a
 	for _, machine := range machines {
 		labels := MergeStringMaps(machine.Labels, map[string]string{v1alpha1.LabelKeyMachinePrepareForUpdate: "true"})
 
-		metadata := metav1.ObjectMeta{
-			Labels: labels,
+		mc := &machinev1alpha1.Machine{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: labels,
+			},
 		}
 
-		metadataPatch, err := json.Marshal(metadata)
+		mcPatch, err := json.Marshal(mc)
 		if err != nil {
 			return err
 		}
 
-		klog.V(3).Infof("metadataPatch %s", metadataPatch)
+		klog.V(3).Infof("mcPatch %s", mcPatch)
 
 		addLabelPatch := fmt.Sprintf(
-			`{"metadata":{"labels": "%s"}}`, labels)
+			`{"metadata":{"labels": {"%s"}}`, labels)
 		// based on this label, the machine-controller will cordon and drain the machine. MCM proviers will do this work.
 		klog.V(3).Infof("addedLabelPatch %s", addLabelPatch)
 		klog.V(3).Infof("added label to start prepare for update %s", labels)
-		if err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addLabelPatch)); err != nil {
+		if err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(mcPatch)); err != nil {
 			klog.V(3).Infof("error while adding label to start prepare for update %s", err)
 			return err
 		}
