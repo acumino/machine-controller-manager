@@ -5,7 +5,7 @@
 -include .env
 include hack/tools.mk
 
-IMAGE_REPOSITORY   := europe-docker.pkg.dev/gardener-project/public/gardener/machine-controller-manager
+IMAGE_REPOSITORY   := shafeeqes/machine-controller-manager
 IMAGE_TAG          := $(shell cat VERSION)
 COVERPROFILE       := test/output/coverprofile.out
 

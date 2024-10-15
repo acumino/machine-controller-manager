@@ -555,13 +555,15 @@ func (dc *controller) pickMachineToPrepareforUpdate(ctx context.Context, is *v1a
 	for _, machine := range machines {
 		labels := MergeStringMaps(machine.Labels, map[string]string{v1alpha1.LabelKeyMachinePrepareForUpdate: "true"})
 		addLabelPatch := fmt.Sprintf(
-			`{"metadata":{"labels: %s"`, labels)
+			`{"metadata":{"labels": "%v"`, labels)
 		// based on this label, the machine-controller will cordon and drain the machine. MCM proviers will do this work.
-		klog.V(0).Infof("added label to start prepare for update %s", labels)
+		klog.V(3).Infof("addedLabelPatch %s", addLabelPatch)
+		klog.V(3).Infof("added label to start prepare for update %s", labels)
 		err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addLabelPatch))
 		if err != nil {
 			return err
 		}
+		klog.V(3).Infof("machine labels after patching: %v", machine.Labels)
 	}
 
 	return nil
