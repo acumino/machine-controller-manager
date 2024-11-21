@@ -22,6 +22,8 @@ Modifications Copyright SAP SE or an SAP affiliate company and Gardener contribu
 package labels
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -126,4 +128,19 @@ func AddLabelToSelector(selector *metav1.LabelSelector, labelKey, labelValue str
 // SelectorHasLabel checks if the given selector contains the given label key in its MatchLabels
 func SelectorHasLabel(selector *metav1.LabelSelector, labelKey string) bool {
 	return len(selector.MatchLabels[labelKey]) > 0
+}
+
+// GetFormatedLabels retun labels in `json` format.
+func GetFormatedLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+
+	labelString := ""
+	for key, value := range labels {
+		labelString += fmt.Sprintf(`"%s":"%s",`, key, value)
+	}
+
+	// remove the trailing comma
+	return labelString[:len(labelString)-1]
 }
