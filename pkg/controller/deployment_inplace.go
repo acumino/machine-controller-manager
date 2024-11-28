@@ -69,6 +69,10 @@ func (dc *controller) rolloutAutoInPlace(ctx context.Context, d *v1alpha1.Machin
 		return fmt.Errorf("failed to label nodes backing old machine sets as candidate for update: %v", err)
 	}
 
+	if err := dc.syncMachineSets(ctx, oldISs, newIS, d); err != nil {
+		return err
+	}
+
 	// In this section, we will attempt to scale up the new machine set. Machines with the `node.machine.sapcloud.io/update-successful` label
 	// can transfer their ownership to the new machine set.
 	// It is crucial to ensure that during the ownership transfer, the machine is not deleted,
@@ -93,6 +97,10 @@ func (dc *controller) rolloutAutoInPlace(ctx context.Context, d *v1alpha1.Machin
 		return dc.syncRolloutStatus(ctx, allISs, newIS, d)
 	}
 
+	if err := dc.syncMachineSets(ctx, oldISs, newIS, d); err != nil {
+		return err
+	}
+
 	if MachineDeploymentComplete(d, &d.Status) {
 		if dc.autoscalerScaleDownAnnotationDuringRollout {
 			// Check if any of the machine under this MachineDeployment contains the by-mcm annotation, and
@@ -109,6 +117,91 @@ func (dc *controller) rolloutAutoInPlace(ctx context.Context, d *v1alpha1.Machin
 
 	// Sync deployment status
 	return dc.syncRolloutStatus(ctx, allISs, newIS, d)
+}
+
+func (dc *controller) syncMachineSets(ctx context.Context, olsISs []*v1alpha1.MachineSet, newIS *v1alpha1.MachineSet, deployment *v1alpha1.MachineDeployment) error {
+	machines, err := dc.machineLister.List(labels.SelectorFromSet(newIS.Spec.Selector.MatchLabels))
+	if err != nil {
+		return err
+	}
+
+	machinesWithUpdateSuccessfulLabel := filterMachinesWithUpdateSuccessfulLabel(machines)
+	klog.V(3).Infof("machine with update successful label in new machine set %v", len(machinesWithUpdateSuccessfulLabel))
+
+	if len(machines) > int(newIS.Spec.Replicas) && len(machinesWithUpdateSuccessfulLabel) > 0 {
+		// scale up the new machine set to the number of machines with the update successful label.
+		scaleUpBy := min(len(machinesWithUpdateSuccessfulLabel), len(machines)-int(newIS.Spec.Replicas))
+		_, _, err := dc.scaleMachineSetAndRecordEvent(ctx, newIS, newIS.Spec.Replicas+int32(scaleUpBy), deployment)
+		if err != nil {
+			return err
+		}
+	}
+
+	// remove all the label from the machines related to the inplace update.
+	for _, machine := range machinesWithUpdateSuccessfulLabel {
+		labelsToRemove := []string{
+			v1alpha1.LabelKeyMachineCandidateForUpdate,
+			v1alpha1.LabelKeyMachineSelectedForUpdate,
+			v1alpha1.LabelKeyMachineDrainSuccessful,
+			v1alpha1.LabelKeyMachineUpdateSuccessful,
+		}
+
+		patchBytes, err := removeLabels(labelsToRemove)
+		if err != nil {
+			return err
+		}
+
+		klog.V(3).Infof("removing label from machine %s update-successful %v", machine.Name, labelsToRemove)
+		if err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(patchBytes)); err != nil {
+			fmt.Printf("error while removing label update-successful %s", err)
+			klog.V(3).Infof("error while removing label update-successful %s", err)
+			return err
+		}
+	}
+
+	// uncordon the node if the for the machine with the update successful label.
+	for _, machine := range machines {
+		nodeName, ok := machine.Labels[v1alpha1.NodeLabelKey]
+		if !ok {
+			return fmt.Errorf("node label not found for machine %s", machine.Name)
+		}
+
+		node, err := dc.nodeLister.Get(nodeName)
+		if err != nil {
+			return fmt.Errorf("failed to get node %s", nodeName)
+		}
+
+		nodeLabels := node.Labels
+		delete(nodeLabels, v1alpha1.LabelKeyMachineCandidateForUpdate)
+		delete(nodeLabels, v1alpha1.LabelKeyMachineSelectedForUpdate)
+		delete(nodeLabels, v1alpha1.LabelKeyMachineReadyForUpdate)
+		delete(nodeLabels, v1alpha1.LabelKeyMachineUpdateSuccessful)
+		delete(nodeLabels, v1alpha1.LabelKeyMachineUpdateFailed)
+		delete(node.Annotations, v1alpha1.AnnotationKeyMachineUpdateFailedReason)
+		node.ObjectMeta.Labels = nodeLabels
+		node.Spec.Unschedulable = false
+		_, err = dc.targetCoreClient.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to uncordon the node %s", node.Name)
+		}
+	}
+
+	for _, is := range olsISs {
+		// scale down the old machine set to the number of machines which is having the labelselector of the machine set.
+		machines, err := dc.machineLister.List(labels.SelectorFromSet(is.Spec.Selector.MatchLabels))
+		if err != nil {
+			return fmt.Errorf("failed to list machines for machine set %s", is.Name)
+		}
+
+		if len(machines) < int(is.Spec.Replicas) {
+			_, _, err := dc.scaleMachineSetAndRecordEvent(ctx, is, int32(len(machines)), deployment)
+			if err != nil {
+				return fmt.Errorf("failed to scale down machine set %s", is.Name)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs []*v1alpha1.MachineSet, newIS *v1alpha1.MachineSet, deployment *v1alpha1.MachineDeployment) (bool, error) {
