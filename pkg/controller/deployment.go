@@ -453,7 +453,7 @@ func (dc *controller) reconcileClusterMachineDeployment(key string) error {
 	}
 
 	// Resync the MachineDeployment after 10 minutes to avoid missing out on missed out events
-	defer dc.enqueueMachineDeploymentAfter(deployment, 10*time.Minute)
+	defer dc.enqueueMachineDeploymentAfter(deployment, 1*time.Minute)
 
 	// Deep-copy otherwise we are mutating our cache.
 	// TODO: Deep-copy only when needed.

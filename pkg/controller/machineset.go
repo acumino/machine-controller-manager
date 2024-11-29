@@ -599,7 +599,7 @@ func (c *controller) reconcileClusterMachineSet(key string) error {
 	}
 
 	// Resync the MachineSet after 10 minutes to avoid missing out on missed out events
-	defer c.enqueueMachineSetAfter(updatedMachineSet, 10*time.Minute)
+	defer c.enqueueMachineSetAfter(updatedMachineSet, 1*time.Minute)
 
 	return manageReplicasErr
 }
