@@ -45,6 +45,15 @@ func (dc *controller) rolloutAutoInPlace(ctx context.Context, d *v1alpha1.Machin
 		},
 	)
 
+	if len(oldISs) > 0 && !dc.machineSetsScaledToZero(oldISs) {
+		// Label all the old machine sets to skip the scale up.
+		err := dc.labelMachineSets(ctx, oldISs, map[string]string{v1alpha1.LabelKeyMachineSetSkipUpdate: "true"})
+		if err != nil {
+			klog.Errorf("Failed to add %s on all machine sets. Error: %s", v1alpha1.LabelKeyMachineSetSkipUpdate, err)
+			return err
+		}
+	}
+
 	if dc.autoscalerScaleDownAnnotationDuringRollout {
 		// Add the annotation on the all machinesets if there are any old-machinesets and not scaled-to-zero.
 		// This also helps in annotating the node under new-machineset, incase the reconciliation is failing in next
@@ -523,4 +532,23 @@ func (dc *controller) getMachinesForDrain(is *v1alpha1.MachineSet, readyForDrain
 		return machinesWithoutSelectedForUpdate[:readyForDrain], nil
 	}
 	return machinesWithoutSelectedForUpdate, nil
+}
+
+// labelMachineSets label all the machineSets with the given label
+func (dc *controller) labelMachineSets(ctx context.Context, MachineSets []*v1alpha1.MachineSet, labels map[string]string) error {
+	for _, machineSet := range MachineSets {
+
+		if machineSet == nil {
+			continue
+		}
+
+		labels := MergeStringMaps(machineSet.Labels, labels)
+		addLabelPatch := fmt.Sprintf(`{"metadata":{"labels":{%s}}}`, labelsutil.GetFormatedLabels(labels))
+
+		if err := dc.machineSetControl.PatchMachineSet(ctx, machineSet.Namespace, machineSet.Name, []byte(addLabelPatch)); err != nil {
+			return fmt.Errorf("failed to label MachineSet %s: %v", machineSet.Name, err)
+		}
+	}
+
+	return nil
 }
