@@ -377,6 +377,11 @@ func (c *controller) manageReplicas(ctx context.Context, allMachines []*v1alpha1
 			return nil
 		}
 
+		if _, ok := machineSet.Labels[v1alpha1.LabelKeyMachineSetSkipUpdate]; ok {
+			klog.V(2).Infof("MachineSet %s has label %s, and hence not creating new machines for it", machineSet.Name, v1alpha1.LabelKeyMachineSetSkipUpdate)
+			return nil
+		}
+
 		diff *= -1
 		if diff > BurstReplicas {
 			diff = BurstReplicas
