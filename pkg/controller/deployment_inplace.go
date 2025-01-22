@@ -67,6 +67,20 @@ func (dc *controller) rolloutAutoInPlace(ctx context.Context, d *v1alpha1.Machin
 		return fmt.Errorf("failed to label nodes backing old machine sets as candidate for update: %v", err)
 	}
 
+	// In this section, we will attempt to scale up the new machine set. Machines with the `node.machine.sapcloud.io/update-successful` label
+	// can transfer their ownership to the new machine set.
+	// It is crucial to ensure that during the ownership transfer, the machine is not deleted,
+	// and the old machine set is not scaled up to recreate the machine.
+	scaledUp, err := dc.reconcileNewMachineSetInPlace(ctx, oldISs, newIS, d)
+	if err != nil {
+		klog.V(3).Infof("this was unexpected error")
+		return err
+	}
+	if scaledUp {
+		// Update DeploymentStatus
+		return dc.syncRolloutStatus(ctx, allISs, newIS, d)
+	}
+
 	if MachineDeploymentComplete(d, &d.Status) {
 		if dc.autoscalerScaleDownAnnotationDuringRollout {
 			// Check if any of the machine under this MachineDeployment contains the by-mcm annotation, and
@@ -83,6 +97,102 @@ func (dc *controller) rolloutAutoInPlace(ctx context.Context, d *v1alpha1.Machin
 
 	// Sync deployment status
 	return dc.syncRolloutStatus(ctx, allISs, newIS, d)
+}
+
+func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs []*v1alpha1.MachineSet, newIS *v1alpha1.MachineSet, deployment *v1alpha1.MachineDeployment) (bool, error) {
+	if (newIS.Spec.Replicas) == (deployment.Spec.Replicas) {
+		// Scaling not required.
+		return false, nil
+	}
+	if (newIS.Spec.Replicas) > (deployment.Spec.Replicas) {
+		// Scale down.
+		scaled, _, err := dc.scaleMachineSetAndRecordEvent(ctx, newIS, (deployment.Spec.Replicas), deployment)
+		return scaled, err
+	}
+
+	klog.V(3).Infof("reconcile new machine set %s", newIS.Name)
+
+	addedNewReplicasCount := int32(0)
+
+	for _, is := range oldISs {
+		transfferedMachineCount := int32(0)
+		// get the machines for the machine set
+		machines, err := dc.machineLister.List(labels.SelectorFromSet(is.Spec.Selector.MatchLabels))
+		if err != nil {
+			return false, err
+		}
+
+		klog.V(3).Infof("machine in old machine set %s: %d", is.Name, len(machines))
+
+		// select the nodes which has been updated successfully
+		nodes, err := dc.nodeLister.List(labels.SelectorFromSet(map[string]string{v1alpha1.LabelKeyMachineUpdateSuccessful: "true"}))
+		if err != nil {
+			return false, err
+		}
+
+		klog.V(3).Infof("nodes with update successful %v: %d", nodes, len(nodes))
+
+		for _, node := range nodes {
+			machine, err := getMachineFromNode(machines, node)
+			// ignore error, if machine not found for the node.
+			if err != nil {
+				continue
+			}
+
+			klog.V(3).Infof("found machine for updated node, machine: %s, node: %s", machine.Name, node.Name)
+
+			// removes labels not present in newIS so that the machine is not selected by the old machine set
+			machineNewLabels := MergeStringMaps(MergeWithOverwriteAndFilter(machine.Labels, is.Spec.Selector.MatchLabels, newIS.Spec.Selector.MatchLabels), map[string]string{v1alpha1.LabelKeyMachineUpdateSuccessful: "true"})
+
+			// update the owner reference of the machine to the new machine set and update the labels
+			addControllerPatch := fmt.Sprintf(
+				`{"metadata":{"ownerReferences":[{"apiVersion":"machine.sapcloud.io/v1alpha1","kind":"%s","name":"%s","uid":"%s","controller":true,"blockOwnerDeletion":true}],"labels":{%s},"uid":"%s"}}`,
+				v1alpha1.SchemeGroupVersion.WithKind("MachineSet"),
+				newIS.GetName(), newIS.GetUID(), labelsutil.GetFormatedLabels(machineNewLabels), machine.UID)
+
+			err = dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addControllerPatch))
+			if err != nil {
+				klog.V(3).Infof("failed to transfer the ownership of machine %s to new machine set %s", machine.Name, err)
+				// scale up the new machine set to the already added replicas.
+				scaled, _, err2 := dc.scaleMachineSetAndRecordEvent(ctx, newIS, newIS.Spec.Replicas+addedNewReplicasCount, deployment)
+				klog.V(3).Infof("scale up after failure failed %s", err2)
+				if err2 != nil {
+					return addedNewReplicasCount > 0, err2
+				}
+
+				klog.V(3).Infof("scale down machine set %s, transffered replicas to new machine set %d", is.Name, transfferedMachineCount)
+				_, _, err2 = dc.scaleMachineSetAndRecordEvent(ctx, is, is.Spec.Replicas-transfferedMachineCount, deployment)
+				klog.V(3).Infof("scale down after failure failed %s", err2)
+				if err2 != nil {
+					klog.V(3).Infof("scale down failed %s", err)
+					return addedNewReplicasCount > 0, err
+				}
+
+				return scaled, err
+			}
+
+			// uncordon the node since the ownership of the machine has been transferred to the new machien set.
+			node.Spec.Unschedulable = false
+			_, err = dc.controlCoreClient.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+			if err != nil {
+				return false, fmt.Errorf("failed to uncordon the node %s", node.Name)
+			}
+
+			transfferedMachineCount++ // scale down the old machine set.
+			addedNewReplicasCount++   // scale up the new machine set.
+		}
+
+		klog.V(3).Infof("scale down machine set %s, transffered replicas to new machine set %d", is.Name, transfferedMachineCount)
+		_, _, err = dc.scaleMachineSetAndRecordEvent(ctx, is, is.Spec.Replicas-transfferedMachineCount, deployment)
+		if err != nil {
+			klog.V(3).Infof("scale down failed %s", err)
+			return addedNewReplicasCount > 0, err
+		}
+	}
+
+	klog.V(3).Infof("scale up the new machine set %s by %d", newIS.Name, addedNewReplicasCount)
+	scaled, _, err := dc.scaleMachineSetAndRecordEvent(ctx, newIS, newIS.Spec.Replicas+addedNewReplicasCount, deployment)
+	return scaled, err
 }
 
 // labelNodesBackingMachineSets annotates all nodes backing the machineSets
