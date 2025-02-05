@@ -6,11 +6,16 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1"
 	"github.com/gardener/machine-controller-manager/pkg/controller/autoscaler"
+	labelsutil "github.com/gardener/machine-controller-manager/pkg/util/labels"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 )
@@ -56,6 +61,12 @@ func (dc *controller) rolloutAutoInPlace(ctx context.Context, d *v1alpha1.Machin
 		klog.Warningf("Failed to add %s on all nodes. Error: %s", PreferNoScheduleKey, err)
 	}
 
+	// label all the machines and nodes backing the old machine sets as candidate for update
+	err = dc.labelNodesBackingMachineSets(ctx, oldISs, map[string]string{v1alpha1.LabelKeyMachineCandidateForUpdate: "true"})
+	if err != nil {
+		return fmt.Errorf("failed to label nodes backing old machine sets as candidate for update: %v", err)
+	}
+
 	if MachineDeploymentComplete(d, &d.Status) {
 		if dc.autoscalerScaleDownAnnotationDuringRollout {
 			// Check if any of the machine under this MachineDeployment contains the by-mcm annotation, and
@@ -72,4 +83,56 @@ func (dc *controller) rolloutAutoInPlace(ctx context.Context, d *v1alpha1.Machin
 
 	// Sync deployment status
 	return dc.syncRolloutStatus(ctx, allISs, newIS, d)
+}
+
+// labelNodesBackingMachineSets annotates all nodes backing the machineSets
+func (dc *controller) labelNodesBackingMachineSets(ctx context.Context, machineSets []*v1alpha1.MachineSet, label map[string]string) error {
+	for _, machineSet := range machineSets {
+
+		if machineSet == nil {
+			continue
+		}
+
+		klog.V(4).Infof("Trying to label nodes under the MachineSet object %q with %v", machineSet.Name, label)
+		filteredMachines, err := dc.machineLister.List(labels.SelectorFromSet(machineSet.Spec.Selector.MatchLabels))
+		if err != nil {
+			return err
+		}
+
+		for _, machine := range filteredMachines {
+			if machine.Labels[v1alpha1.NodeLabelKey] != "" {
+				labels := MergeStringMaps(machine.Labels, map[string]string{v1alpha1.LabelKeyMachineCandidateForUpdate: "true"})
+				addLabelPatch := fmt.Sprintf(`{"metadata":{"labels":{%s}}}`, labelsutil.GetFormatedLabels(labels))
+
+				klog.V(3).Infof("adding label to machine %s candidate for update %s", machine.Name, labels)
+				if err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addLabelPatch)); err != nil {
+					klog.V(3).Infof("error while adding label candidate for update %s", err)
+					return err
+				}
+
+				node, err := dc.nodeLister.Get(machine.Labels[v1alpha1.NodeLabelKey])
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						continue // Node is not found, continue to the next machine
+					}
+					klog.Errorf("Error occurred while trying to fetch node object - err: %s", err)
+					return err
+				}
+				if node.Labels[v1alpha1.LabelKeyMachineCandidateForUpdate] == "true" {
+					continue
+				}
+				nodeCopy := node.DeepCopy()
+				if nodeCopy.Labels == nil {
+					nodeCopy.Labels = make(map[string]string)
+				}
+				nodeCopy.Labels[v1alpha1.LabelKeyMachineCandidateForUpdate] = "true"
+				if _, err := dc.targetCoreClient.CoreV1().Nodes().Update(ctx, nodeCopy, metav1.UpdateOptions{}); err != nil {
+					return err
+				}
+			}
+		}
+		klog.V(3).Infof("Labeled the nodes backed by MachineSet %q with %v", machineSet.Name, label)
+	}
+
+	return nil
 }
