@@ -470,6 +470,24 @@ func (dc *controller) labelMachinesToSelectedForUpdate(ctx context.Context, is *
 			return machinesSelectedForUpdate, err
 		}
 
+		if nodeName := machine.Labels[v1alpha1.NodeLabelKey]; nodeName != "" {
+			node, err := dc.nodeLister.Get(nodeName)
+			if err != nil {
+				return machinesSelectedForUpdate, err
+			}
+			if node.Labels[v1alpha1.LabelKeyMachineSelectedForUpdate] == "true" {
+				continue
+			}
+			nodeCopy := node.DeepCopy()
+			if nodeCopy.Labels == nil {
+				nodeCopy.Labels = make(map[string]string)
+			}
+			nodeCopy.Labels[v1alpha1.LabelKeyMachineSelectedForUpdate] = "true"
+			if _, err := dc.targetCoreClient.CoreV1().Nodes().Update(ctx, nodeCopy, metav1.UpdateOptions{}); err != nil {
+				return machinesSelectedForUpdate, err
+			}
+		}
+
 		machinesSelectedForUpdate++
 	}
 
