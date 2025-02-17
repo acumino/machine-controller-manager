@@ -154,6 +154,9 @@ const (
 
 	// MachineDepedenciesUpdating means machine dependencies are getting updated
 	MachineDepedenciesUpdating MachinePhase = "DependenciesUpdating"
+
+	// MachineDepedenciesUpdateFailed means machine dependencies update failed
+	MachineDepedenciesUpdateFailed MachinePhase = "DependenciesUpdateFailed"
 )
 
 // MachineState is a current state of the operation.
@@ -181,6 +184,9 @@ const (
 
 	// MachineOperationUpdate indicates that the operation was an update
 	MachineOperationUpdate MachineOperationType = "Update"
+
+	// MachineOperationDepedenciesUpdate indicates that the operation was a dependencies update
+	MachineOperationDepedenciesUpdate MachineOperationType = "DependenciesUpdate"
 
 	// MachineOperationHealthCheck indicates that the operation was a health check of node object
 	MachineOperationHealthCheck MachineOperationType = "HealthCheck"

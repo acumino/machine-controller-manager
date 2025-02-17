@@ -292,7 +292,7 @@ func (c *controller) updateMachineStatusAndLabelMachineAndNode(ctx context.Conte
 	machine.Status.LastOperation = v1alpha1.LastOperation{
 		Description:    description,
 		State:          v1alpha1.MachineStateProcessing,
-		Type:           v1alpha1.MachineOperationUpdate,
+		Type:           v1alpha1.MachineOperationDepedenciesUpdate,
 		LastUpdateTime: metav1.Now(),
 	}
 
@@ -723,7 +723,7 @@ func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alph
 			}
 			cloneDirty = true
 		}
-	} else {
+	} else if machine.Status.CurrentStatus.Phase != v1alpha1.MachineDepedenciesUpdating && machine.Status.CurrentStatus.Phase != v1alpha1.MachineDepedenciesUpdateFailed {
 		populatedConditions, removedConditions, isChanged := nodeConditionsHaveChanged(machine.Status.Conditions, node.Status.Conditions)
 		if isChanged {
 			clone.Status.Conditions = node.Status.Conditions
@@ -791,27 +791,64 @@ func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alph
 
 	if !cloneDirty &&
 		(machine.Status.CurrentStatus.Phase == v1alpha1.MachinePending ||
-			machine.Status.CurrentStatus.Phase == v1alpha1.MachineUnknown) {
+			machine.Status.CurrentStatus.Phase == v1alpha1.MachineUnknown || machine.Status.CurrentStatus.Phase == v1alpha1.MachineDepedenciesUpdating ||
+			machine.Status.CurrentStatus.Phase == v1alpha1.MachineDepedenciesUpdateFailed) {
 		var (
 			description     string
 			timeOutDuration time.Duration
 		)
 
 		isMachinePending := machine.Status.CurrentStatus.Phase == v1alpha1.MachinePending
+		isMachineDepedenciesUpdating := machine.Status.CurrentStatus.Phase == v1alpha1.MachineDepedenciesUpdating
 		sleepTime := 1 * time.Minute
 
 		if isMachinePending {
 			timeOutDuration = c.getEffectiveCreationTimeout(machine).Duration
+		} else if isMachineDepedenciesUpdating {
+			timeOutDuration = c.getEffectiveDependenciesUpdateTimeout(machine).Duration
 		} else {
 			timeOutDuration = c.getEffectiveHealthTimeout(machine).Duration
 		}
 
+		// if the lable update successful or failed, then skip the timeout check
+		if node.Labels[v1alpha1.LabelKeyMachineUpdateSuccessful] == "true" || node.Labels[v1alpha1.LabelKeyMachineUpdateFailed] == "true" {
+			if node.Labels[v1alpha1.LabelKeyMachineUpdateSuccessful] == "true" {
+				description = fmt.Sprintf("Machine %s successfully updated dependecies", machine.Name)
+				klog.V(2).Infof("%s with backing node %q and providerID %q sucessfully update the dependecies", description, getNodeName(machine), getProviderID(machine))
+				clone.Status.CurrentStatus = v1alpha1.CurrentStatus{
+					Phase:          v1alpha1.MachineRunning,
+					LastUpdateTime: metav1.Now(),
+				}
+				clone.Status.LastOperation = v1alpha1.LastOperation{
+					Description:    description,
+					State:          v1alpha1.MachineStateSuccessful,
+					Type:           v1alpha1.MachineOperationUpdate,
+					LastUpdateTime: metav1.Now(),
+				}
+				cloneDirty = true
+			} else {
+				description = fmt.Sprintf("Machine %s failed to update dependecies: %s", machine.Name, node.Annotations[v1alpha1.AnnotationKeyMachineUpdateFailedReason])
+				klog.V(2).Infof("%s with backing node %q and providerID %q failed to update dependecies", description, getNodeName(machine), getProviderID(machine))
+				clone.Status.CurrentStatus = v1alpha1.CurrentStatus{
+					Phase:          v1alpha1.MachineDepedenciesUpdateFailed,
+					LastUpdateTime: metav1.Now(),
+				}
+				clone.Status.LastOperation = v1alpha1.LastOperation{
+					Description:    description,
+					State:          v1alpha1.MachineStateFailed,
+					Type:           v1alpha1.MachineOperationDepedenciesUpdate,
+					LastUpdateTime: metav1.Now(),
+				}
+				cloneDirty = true
+			}
+		}
+
 		// Timeout value obtained by subtracting last operation with expected time out period
 		timeOut := metav1.Now().Add(-timeOutDuration).Sub(machine.Status.CurrentStatus.LastUpdateTime.Time)
-		if timeOut > 0 {
+		if !cloneDirty && timeOut > 0 {
 			// Machine health timeout occurred while joining or rejoining of machine
 
-			if !isMachinePending {
+			if !isMachinePending && !isMachineDepedenciesUpdating {
 				// Timeout occurred due to machine being unhealthy for too long
 				description = fmt.Sprintf(
 					"Machine %s health checks failing since last %s minutes. Updating machine phase to Failed. Node Conditions: %+v",
@@ -825,27 +862,50 @@ func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alph
 				c.permitGiver.RegisterPermits(machineDeployName, 1)
 				return c.tryMarkingMachineFailed(ctx, machine, clone, machineDeployName, description, lockAcquireTimeout)
 			}
-			// Timeout occurred while machine creation
-			description = fmt.Sprintf(
-				"Machine %s failed to join the cluster in %s minutes.",
-				machine.Name,
-				timeOutDuration,
-			)
-			// Log the error message for machine failure
-			klog.Error(description)
 
-			clone.Status.LastOperation = v1alpha1.LastOperation{
-				Description:    description,
-				State:          v1alpha1.MachineStateFailed,
-				Type:           machine.Status.LastOperation.Type,
-				LastUpdateTime: metav1.Now(),
+			if isMachineDepedenciesUpdating {
+				description = fmt.Sprintf(
+					"Machine %s failed to update dependecies in %s minutes.",
+					machine.Name,
+					timeOutDuration,
+				)
+
+				klog.Error(description)
+
+				clone.Status.LastOperation = v1alpha1.LastOperation{
+					Description:    description,
+					State:          v1alpha1.MachineStateFailed,
+					Type:           v1alpha1.MachineOperationDepedenciesUpdate,
+					LastUpdateTime: metav1.Now(),
+				}
+				clone.Status.CurrentStatus = v1alpha1.CurrentStatus{
+					Phase:          v1alpha1.MachineDepedenciesUpdateFailed,
+					LastUpdateTime: metav1.Now(),
+				}
+				cloneDirty = true
+			} else {
+				// Timeout occurred while machine creation
+				description = fmt.Sprintf(
+					"Machine %s failed to join the cluster in %s minutes.",
+					machine.Name,
+					timeOutDuration,
+				)
+				// Log the error message for machine failure
+				klog.Error(description)
+
+				clone.Status.LastOperation = v1alpha1.LastOperation{
+					Description:    description,
+					State:          v1alpha1.MachineStateFailed,
+					Type:           machine.Status.LastOperation.Type,
+					LastUpdateTime: metav1.Now(),
+				}
+				clone.Status.CurrentStatus = v1alpha1.CurrentStatus{
+					Phase: v1alpha1.MachineFailed,
+					// TimeoutActive:  false,
+					LastUpdateTime: metav1.Now(),
+				}
+				cloneDirty = true
 			}
-			clone.Status.CurrentStatus = v1alpha1.CurrentStatus{
-				Phase: v1alpha1.MachineFailed,
-				// TimeoutActive:  false,
-				LastUpdateTime: metav1.Now(),
-			}
-			cloneDirty = true
 		} else {
 			// If timeout has not occurred, re-enqueue the machine
 			// after a specified sleep time
@@ -1726,6 +1786,16 @@ func (c *controller) getEffectiveCreationTimeout(machine *v1alpha1.Machine) *met
 		effectiveCreationTimeout = &c.safetyOptions.MachineCreationTimeout
 	}
 	return effectiveCreationTimeout
+}
+
+func (c *controller) getEffectiveDependenciesUpdateTimeout(machine *v1alpha1.Machine) *metav1.Duration {
+	var effectiveDependenciesUpdateTimeout *metav1.Duration
+	if machine.Spec.MachineConfiguration != nil && machine.Spec.MachineConfiguration.MachineDependeciesUpdateTimeout != nil {
+		effectiveDependenciesUpdateTimeout = machine.Spec.MachineConfiguration.MachineDependeciesUpdateTimeout
+	} else {
+		effectiveDependenciesUpdateTimeout = &c.safetyOptions.MachineCreationTimeout
+	}
+	return effectiveDependenciesUpdateTimeout
 }
 
 // getEffectiveNodeConditions returns the nodeConditions set on the machine-object, otherwise returns the conditions set using the global-flag.
