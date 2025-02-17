@@ -676,6 +676,12 @@ func schema_pkg_apis_machine_v1alpha1_MachineConfiguration(ref common.ReferenceC
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
 						},
 					},
+					"dependenciesUpdateTimeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MachineDependeciesUpdateTimeout is the timeout after which machine dependencies update is declared failed.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
 					"maxEvictRetries": {
 						SchemaProps: spec.SchemaProps{
 							Description: "MaxEvictRetries is the number of retries that will be attempted while draining the node.",
@@ -1440,6 +1446,12 @@ func schema_pkg_apis_machine_v1alpha1_MachineSpec(ref common.ReferenceCallback) 
 					"creationTimeout": {
 						SchemaProps: spec.SchemaProps{
 							Description: "MachineCreationTimeout is the timeout after which machinie creation is declared failed.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"dependenciesUpdateTimeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MachineDependeciesUpdateTimeout is the timeout after which machine dependencies update is declared failed.",
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
 						},
 					},

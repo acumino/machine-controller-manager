@@ -40,6 +40,10 @@ type MachineConfiguration struct {
 	// +optional
 	MachineCreationTimeout *metav1.Duration `json:"creationTimeout,omitempty"`
 
+	// MachineDependeciesUpdateTimeout is the timeout after which machine dependencies update is declared failed.
+	// +optional
+	MachineDependeciesUpdateTimeout *metav1.Duration `json:"dependenciesUpdateTimeout,omitempty"`
+
 	// MaxEvictRetries is the number of retries that will be attempted while draining the node.
 	// +optional
 	MaxEvictRetries *int32 `json:"maxEvictRetries,omitempty"`

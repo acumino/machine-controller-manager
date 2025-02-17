@@ -1055,6 +1055,22 @@ Kubernetes meta/v1.Duration
 </tr>
 <tr>
 <td>
+<code>dependenciesUpdateTimeout</code>
+</td>
+<td>
+<em>
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>MachineDependeciesUpdateTimeout is the timeout after which machine dependencies update is declared failed.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>maxEvictRetries</code>
 </td>
 <td>

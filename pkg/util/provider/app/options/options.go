@@ -67,6 +67,7 @@ func NewMCServer() *MCServer {
 				MachineCreationTimeout:                   metav1.Duration{Duration: 20 * time.Minute},
 				MachineHealthTimeout:                     metav1.Duration{Duration: 10 * time.Minute},
 				MachineDrainTimeout:                      metav1.Duration{Duration: drain.DefaultMachineDrainTimeout},
+				MachineDependeciesUpdateTimeout:          metav1.Duration{Duration: 20 * time.Minute},
 				MaxEvictRetries:                          drain.DefaultMaxEvictRetries,
 				PvDetachTimeout:                          metav1.Duration{Duration: 2 * time.Minute},
 				PvReattachTimeout:                        metav1.Duration{Duration: 90 * time.Second},

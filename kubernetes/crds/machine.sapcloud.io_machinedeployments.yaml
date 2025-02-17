@@ -279,6 +279,10 @@ spec:
                         description: MachineCreationTimeout is the timeout after which
                           machinie creation is declared failed.
                         type: string
+                      dependenciesUpdateTimeout:
+                        description: MachineDependeciesUpdateTimeout is the timeout
+                          after which machine dependencies update is declared failed.
+                        type: string
                       drainTimeout:
                         description: MachineDraintimeout is the timeout after which
                           machine is forcefully deleted.
