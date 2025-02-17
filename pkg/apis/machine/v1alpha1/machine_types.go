@@ -151,6 +151,9 @@ const (
 
 	// MachineCrashLoopBackOff means machine creation is failing. It means that machine object is present but there is no corresponding VM.
 	MachineCrashLoopBackOff MachinePhase = "CrashLoopBackOff"
+
+	// MachineDepedenciesUpdating means machine dependencies are getting updated
+	MachineDepedenciesUpdating MachinePhase = "DependenciesUpdating"
 )
 
 // MachineState is a current state of the operation.
