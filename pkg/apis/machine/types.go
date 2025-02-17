@@ -94,6 +94,9 @@ type MachineConfiguration struct {
 	// MachineCreationTimeout is the timeout after which machinie creation is declared failed.
 	MachineCreationTimeout *metav1.Duration
 
+	// MachineDependeciesUpdateTimeout is the timeout after which machine dependencies update is declared failed.
+	MachineDependeciesUpdateTimeout *metav1.Duration
+
 	// MaxEvictRetries is the number of retries that will be attempted while draining the node.
 	MaxEvictRetries *int32
 

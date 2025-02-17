@@ -530,6 +530,7 @@ func autoConvert_v1alpha1_MachineConfiguration_To_machine_MachineConfiguration(i
 	out.MachineDrainTimeout = (*metav1.Duration)(unsafe.Pointer(in.MachineDrainTimeout))
 	out.MachineHealthTimeout = (*metav1.Duration)(unsafe.Pointer(in.MachineHealthTimeout))
 	out.MachineCreationTimeout = (*metav1.Duration)(unsafe.Pointer(in.MachineCreationTimeout))
+	out.MachineDependeciesUpdateTimeout = (*metav1.Duration)(unsafe.Pointer(in.MachineDependeciesUpdateTimeout))
 	out.MaxEvictRetries = (*int32)(unsafe.Pointer(in.MaxEvictRetries))
 	out.NodeConditions = (*string)(unsafe.Pointer(in.NodeConditions))
 	return nil
@@ -544,6 +545,7 @@ func autoConvert_machine_MachineConfiguration_To_v1alpha1_MachineConfiguration(i
 	out.MachineDrainTimeout = (*metav1.Duration)(unsafe.Pointer(in.MachineDrainTimeout))
 	out.MachineHealthTimeout = (*metav1.Duration)(unsafe.Pointer(in.MachineHealthTimeout))
 	out.MachineCreationTimeout = (*metav1.Duration)(unsafe.Pointer(in.MachineCreationTimeout))
+	out.MachineDependeciesUpdateTimeout = (*metav1.Duration)(unsafe.Pointer(in.MachineDependeciesUpdateTimeout))
 	out.MaxEvictRetries = (*int32)(unsafe.Pointer(in.MaxEvictRetries))
 	out.NodeConditions = (*string)(unsafe.Pointer(in.NodeConditions))
 	return nil
