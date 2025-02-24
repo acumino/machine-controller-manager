@@ -1346,7 +1346,7 @@ func (c *controller) drainNodeForInPlace(ctx context.Context, machine *v1alpha1.
 		v1alpha1.LastOperation{
 			Description:    description,
 			State:          state,
-			Type:           v1alpha1.MachineOperationDelete,
+			Type:           v1alpha1.MachineOperationDrainNode,
 			LastUpdateTime: metav1.Now(),
 		},
 		// Let the clone.Status.CurrentStatus (LastUpdateTime) be as it was before.
