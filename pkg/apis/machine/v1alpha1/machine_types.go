@@ -219,6 +219,15 @@ const (
 
 	// DrainSuccessful is a constant for reason in condition that indicates node drain is successful
 	DrainSuccessful string = "DrainSuccessful"
+
+	// ReadyForUpdate is a constant for reason in condition that indicates node is ready for update
+	ReadyForUpdate string = "ReadyForUpdate"
+
+	// UpdateSuccessful is a constant for reason in condition that indicates update succeeded
+	UpdateSuccessful string = "UpdateSuccessful"
+
+	// UpdateFailed is a constant for reason in condition that indicates update failed
+	UpdateFailed string = "UpdateFailed"
 )
 
 // CurrentStatus contains information about the current status of Machine.

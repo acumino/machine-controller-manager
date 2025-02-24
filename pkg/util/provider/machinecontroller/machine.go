@@ -24,6 +24,7 @@ import (
 	machineapi "github.com/gardener/machine-controller-manager/pkg/apis/machine"
 	"github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1"
 	"github.com/gardener/machine-controller-manager/pkg/apis/machine/validation"
+	"github.com/gardener/machine-controller-manager/pkg/util/nodeops"
 	"github.com/gardener/machine-controller-manager/pkg/util/provider/driver"
 	"github.com/gardener/machine-controller-manager/pkg/util/provider/machinecodes/codes"
 	"github.com/gardener/machine-controller-manager/pkg/util/provider/machinecodes/status"
@@ -180,24 +181,46 @@ func (c *controller) reconcileClusterMachine(ctx context.Context, machine *v1alp
 		}
 	}
 
-	// need to check what point this code should be added
-	if machine.Labels[v1alpha1.LabelKeyMachineSelectedForUpdate] == "true" && machine.Labels[v1alpha1.LabelKeyMachineDrainSuccessful] != "true" {
-		if machine.Labels[v1alpha1.LabelKeyMachineDrainSuccessful] == "true" && machine.Labels[v1alpha1.LabelKeyMachineUpdateSuccessful] != "true" {
-			// if node doesn't have label ready for update then add it
-			nodeName := getNodeName(machine)
-			node, err := c.nodeLister.Get(nodeName)
-			if err != nil {
-				return machineutils.ConflictRetry, err
-			}
-			if node.Labels[v1alpha1.LabelKeyMachineReadyForUpdate] != "true" {
-				return c.updateMachineStatusAndLabelMachineAndNode(ctx, machine)
-			}
+	// // need to check what point this code should be added
+	// if machine.Labels[v1alpha1.LabelKeyMachineSelectedForUpdate] == "true" && machine.Labels[v1alpha1.LabelKeyMachineDrainSuccessful] != "true" {
+	// 	if machine.Labels[v1alpha1.LabelKeyMachineDrainSuccessful] == "true" && machine.Labels[v1alpha1.LabelKeyMachineUpdateSuccessful] != "true" {
+	// 		// if node doesn't have label ready for update then add it
+	// 		nodeName := getNodeName(machine)
+	// 		node, err := c.nodeLister.Get(nodeName)
+	// 		if err != nil {
+	// 			return machineutils.ConflictRetry, err
+	// 		}
+	// 		if node.Labels[v1alpha1.LabelKeyMachineReadyForUpdate] != "true" {
+	// 			return c.updateMachineStatusAndLabelMachineAndNode(ctx, machine)
+	// 		}
 
-			// give machine time for it to get ready for get updated.
-			return machineutils.MediumRetry, nil
+	// 		// give machine time for it to get ready for get updated.
+	// 		return machineutils.MediumRetry, nil
+	// 	}
+	// 	// trigger drain of the machine/node
+	// 	return c.drainNodeForInPlace(ctx, machine)
+	// }
+
+	if machine.Labels[v1alpha1.LabelKeyMachineSelectedForUpdate] == "true" {
+		cond, err := nodeops.GetNodeCondition(ctx, c.targetCoreClient, getNodeName(machine), v1alpha1.NodeInPlaceUpdate)
+		if err != nil {
+			return machineutils.ShortRetry, err
 		}
-		// trigger drain of the machine/node
-		return c.drainNodeForInPlace(ctx, machine)
+		// if the condition is not present then trigger the drain
+		if cond == nil {
+			return c.drainNodeForInPlace(ctx, machine)
+		}
+		// if the condition is present and the reason is drain successful then the node is ready for update
+		if cond.Reason == v1alpha1.DrainSuccessful {
+			cond.Reason = v1alpha1.ReadyForUpdate
+			cond.LastTransitionTime = metav1.Now()
+			cond.Message = "Node is ready for update"
+			if err := nodeops.AddOrUpdateConditionsOnNode(ctx, c.targetCoreClient, getNodeName(machine), *cond); err != nil {
+				return machineutils.ShortRetry, err
+			}
+		}
+		// give machine tume for it for update to get applied
+		return machineutils.MediumRetry, nil
 	}
 
 	if machine.Spec.ProviderID == "" || machine.Status.CurrentStatus.Phase == "" || machine.Status.CurrentStatus.Phase == v1alpha1.MachineCrashLoopBackOff {

@@ -151,7 +151,7 @@ func (dc *controller) syncMachineSets(ctx context.Context, olsISs []*v1alpha1.Ma
 		labelsToRemove := []string{
 			v1alpha1.LabelKeyMachineCandidateForUpdate,
 			v1alpha1.LabelKeyMachineSelectedForUpdate,
-			v1alpha1.LabelKeyMachineDrainSuccessful,
+			// v1alpha1.LabelKeyMachineDrainSuccessful,
 			v1alpha1.LabelKeyMachineUpdateSuccessful,
 		}
 
@@ -183,7 +183,7 @@ func (dc *controller) syncMachineSets(ctx context.Context, olsISs []*v1alpha1.Ma
 		nodeLabels := node.Labels
 		delete(nodeLabels, v1alpha1.LabelKeyMachineCandidateForUpdate)
 		delete(nodeLabels, v1alpha1.LabelKeyMachineSelectedForUpdate)
-		delete(nodeLabels, v1alpha1.LabelKeyMachineReadyForUpdate)
+		// delete(nodeLabels, v1alpha1.LabelKeyMachineReadyForUpdate)
 		delete(nodeLabels, v1alpha1.LabelKeyMachineUpdateSuccessful)
 		delete(nodeLabels, v1alpha1.LabelKeyMachineUpdateFailed)
 		delete(node.Annotations, v1alpha1.AnnotationKeyMachineUpdateFailedReason)
