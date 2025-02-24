@@ -35,7 +35,6 @@ import (
 
 	machineapi "github.com/gardener/machine-controller-manager/pkg/apis/machine"
 	"github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1"
-	utillabels "github.com/gardener/machine-controller-manager/pkg/util/labels"
 	"github.com/gardener/machine-controller-manager/pkg/util/nodeops"
 	"github.com/gardener/machine-controller-manager/pkg/util/provider/drain"
 	"github.com/gardener/machine-controller-manager/pkg/util/provider/driver"
@@ -52,7 +51,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	storageclient "k8s.io/client-go/kubernetes/typed/storage/v1"
@@ -268,18 +266,18 @@ func (c *controller) syncMachineNameToNode(ctx context.Context, machine *v1alpha
 }
 
 func (c *controller) updateMachineStatusAndLabelMachineAndNode(ctx context.Context, machine *v1alpha1.Machine, labelMachine bool) (machineutils.RetryPeriod, error) {
-	if labelMachine {
-		machineLabels := machine.Labels
-		if machineLabels == nil {
-			machineLabels = make(map[string]string)
-		}
+	// if labelMachine {
+	// 	machineLabels := machine.Labels
+	// 	if machineLabels == nil {
+	// 		machineLabels = make(map[string]string)
+	// 	}
 
-		machineLabels[v1alpha1.LabelKeyMachineDrainSuccessful] = "true"
-		addLabelPatch := fmt.Sprintf(`{"metadata":{"labels":{%s}}}`, utillabels.GetFormatedLabels(machineLabels))
-		if _, err := c.controlMachineClient.Machines(machine.Namespace).Patch(ctx, machine.Name, types.MergePatchType, []byte(addLabelPatch), metav1.PatchOptions{}); err != nil {
-			return machineutils.ShortRetry, err
-		}
-	}
+	// 	machineLabels[v1alpha1.LabelKeyMachineDrainSuccessful] = "true"
+	// 	addLabelPatch := fmt.Sprintf(`{"metadata":{"labels":{%s}}}`, utillabels.GetFormatedLabels(machineLabels))
+	// 	if _, err := c.controlMachineClient.Machines(machine.Namespace).Patch(ctx, machine.Name, types.MergePatchType, []byte(addLabelPatch), metav1.PatchOptions{}); err != nil {
+	// 		return machineutils.ShortRetry, err
+	// 	}
+	// }
 
 	// update machine status to indicate that the machine will undergo an in-place update
 	description := fmt.Sprintf("Machine %s will/is undergo/undergoing an in-place update", machine.Name)
