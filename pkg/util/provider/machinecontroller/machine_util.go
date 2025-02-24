@@ -265,7 +265,7 @@ func (c *controller) syncMachineNameToNode(ctx context.Context, machine *v1alpha
 	return machineutils.LongRetry, nil
 }
 
-func (c *controller) updateMachineStatusAndLabelMachineAndNode(ctx context.Context, machine *v1alpha1.Machine, labelMachine bool) (machineutils.RetryPeriod, error) {
+func (c *controller) updateMachineStatusAndLabelMachineAndNode(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error) {
 	// if labelMachine {
 	// 	machineLabels := machine.Labels
 	// 	if machineLabels == nil {
@@ -1378,7 +1378,7 @@ func (c *controller) drainNodeForInPlace(ctx context.Context, machine *v1alpha1.
 		return updateRetryPeriod, updateErr
 	}
 
-	return c.updateMachineStatusAndLabelMachineAndNode(ctx, machine, true)
+	return c.updateMachineStatusAndLabelMachineAndNode(ctx, machine)
 }
 
 // drainNode attempts to drain the node backed by the machine object

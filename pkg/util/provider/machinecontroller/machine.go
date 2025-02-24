@@ -190,7 +190,7 @@ func (c *controller) reconcileClusterMachine(ctx context.Context, machine *v1alp
 				return machineutils.ConflictRetry, err
 			}
 			if node.Labels[v1alpha1.LabelKeyMachineReadyForUpdate] != "true" {
-				return c.updateMachineStatusAndLabelMachineAndNode(ctx, machine, false)
+				return c.updateMachineStatusAndLabelMachineAndNode(ctx, machine)
 			}
 
 			// give machine time for it to get ready for get updated.
