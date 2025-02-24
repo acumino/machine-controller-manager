@@ -303,31 +303,51 @@ func (c *controller) updateMachineStatusAndLabelMachineAndNode(ctx context.Conte
 		}
 	}
 
-	node, err := c.nodeLister.Get(getNodeName(machine))
+	// node, err := c.nodeLister.Get(getNodeName(machine))
+	// if err != nil {
+	// 	if apierrors.IsNotFound(err) {
+	// 		// Don't return error so that other steps can be executed.
+	// 		return machineutils.MediumRetry, nil
+	// 	}
+	// 	klog.Errorf("Error occurred while trying to fetch node object - err: %s", err)
+	// 	return machineutils.ShortRetry, err
+	// }
+
+	// if node.Labels[v1alpha1.LabelKeyMachineReadyForUpdate] == "true" {
+	// 	return machineutils.MediumRetry, nil
+	// }
+
+	// nodeCopy := node.DeepCopy()
+
+	// if nodeCopy.Labels == nil {
+	// 	nodeCopy.Labels = make(map[string]string)
+	// }
+	// nodeCopy.Labels[v1alpha1.LabelKeyMachineReadyForUpdate] = "true"
+
+	// if _, err := c.targetCoreClient.CoreV1().Nodes().Update(ctx, nodeCopy, metav1.UpdateOptions{}); err != nil {
+	// 	if apierrors.IsConflict(err) {
+	// 		return machineutils.ConflictRetry, err
+	// 	}
+	// 	return machineutils.ShortRetry, err
+	// }
+
+	cond, err := nodeops.GetNodeCondition(ctx, c.targetCoreClient, getNodeName(machine), v1alpha1.NodeInPlaceUpdate)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// Don't return error so that other steps can be executed.
-			return machineutils.MediumRetry, nil
+		return machineutils.MediumRetry, err
+	}
+
+	if cond == nil {
+		// Add the condition to the node
+		cond = &v1.NodeCondition{
+			Type:               v1alpha1.NodeInPlaceUpdate,
+			Status:             v1.ConditionTrue,
+			LastTransitionTime: metav1.Now(),
+			Reason:             v1alpha1.DrainSuccessful,
+			Message:            "Machine is undergoing an in-place update",
 		}
-		klog.Errorf("Error occurred while trying to fetch node object - err: %s", err)
-		return machineutils.ShortRetry, err
 	}
 
-	if node.Labels[v1alpha1.LabelKeyMachineReadyForUpdate] == "true" {
-		return machineutils.MediumRetry, nil
-	}
-
-	nodeCopy := node.DeepCopy()
-
-	if nodeCopy.Labels == nil {
-		nodeCopy.Labels = make(map[string]string)
-	}
-	nodeCopy.Labels[v1alpha1.LabelKeyMachineReadyForUpdate] = "true"
-
-	if _, err := c.targetCoreClient.CoreV1().Nodes().Update(ctx, nodeCopy, metav1.UpdateOptions{}); err != nil {
-		if apierrors.IsConflict(err) {
-			return machineutils.ConflictRetry, err
-		}
+	if err := nodeops.AddOrUpdateConditionsOnNode(ctx, c.targetCoreClient, getNodeName(machine), *cond); err != nil {
 		return machineutils.ShortRetry, err
 	}
 

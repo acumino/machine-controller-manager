@@ -213,6 +213,14 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
+const (
+	// NodeInPlaceUpdate is a node condition type for in-place update
+	NodeInPlaceUpdate corev1.NodeConditionType = "InPlaceUpdate"
+
+	// DrainSuccessful is a constant for reason in condition that indicates node drain is successful
+	DrainSuccessful string = "DrainSuccessful"
+)
+
 // CurrentStatus contains information about the current status of Machine.
 type CurrentStatus struct {
 	Phase MachinePhase `json:"phase,omitempty"`
