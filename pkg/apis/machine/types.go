@@ -254,6 +254,9 @@ const (
 	// MachineOperationDepedenciesUpdate indicates that the operation was a dependencies update
 	MachineOperationDepedenciesUpdate MachineOperationType = "DependenciesUpdate"
 
+	// MachineOperationDrainNode indicates that the operation was a drain node
+	MachineOperationDrainNode MachineOperationType = "DrainNode"
+
 	// MachineOperationHealthCheck indicates that the operation was a create
 	MachineOperationHealthCheck MachineOperationType = "HealthCheck"
 
