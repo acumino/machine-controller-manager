@@ -302,18 +302,19 @@ func newMachines(
 
 func newNode(
 	_ int,
+	labels map[string]string,
 	nodeSpec *corev1.NodeSpec,
 	nodeStatus *corev1.NodeStatus,
 ) *corev1.Node {
-	return newNodes(1, nodeSpec, nodeStatus)[0]
+	return newNodes(1, labels, nodeSpec, nodeStatus)[0]
 }
 
 func newNodes(
 	nodeCount int,
+	labels map[string]string,
 	nodeSpec *corev1.NodeSpec,
 	_ *corev1.NodeStatus,
 ) []*corev1.Node {
-
 	nodes := make([]*corev1.Node, nodeCount)
 	for i := range nodes {
 		node := &corev1.Node{
@@ -322,7 +323,8 @@ func newNodes(
 				Kind:       "Node",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: fmt.Sprintf("node-%d", i),
+				Name:   fmt.Sprintf("node-%d", i),
+				Labels: labels,
 			},
 			Spec: *nodeSpec.DeepCopy(),
 		}
