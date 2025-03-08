@@ -503,25 +503,24 @@ func (dc *controller) getMachinesUndergoingUpdate(oldISs []*v1alpha1.MachineSet)
 }
 
 func (dc *controller) getMachinesForDrain(is *v1alpha1.MachineSet, readyForDrain int32) ([]*v1alpha1.Machine, error) {
-	// select only those machines which are candidate for update and not selected for update.
-	machines, err := dc.machineLister.List(labels.SelectorFromSet(MergeStringMaps(is.Spec.Selector.MatchLabels, map[string]string{v1alpha1.LabelKeyNodeCandidateForUpdate: "true"})))
+	machines, err := dc.machineLister.List(labels.SelectorFromSet(is.Spec.Selector.MatchLabels))
 	if err != nil {
 		return nil, err
 	}
 
-	// delete machines which are already selected for update.
-	machinesWithoutSelectedForUpdate := []*v1alpha1.Machine{}
-	for i := 0; i < len(machines); i++ {
-		if _, ok := machines[i].Labels[v1alpha1.LabelKeyNodeSelectedForUpdate]; !ok {
-			machinesWithoutSelectedForUpdate = append(machinesWithoutSelectedForUpdate, machines[i])
+	candidateForUpdateMachines := []*v1alpha1.Machine{}
+	for _, machine := range machines {
+		cond := GetMachineCondition(machine, v1alpha1.NodeInPlaceUpdate)
+		if cond != nil && cond.Reason == v1alpha1.UpdateCandidate {
+			candidateForUpdateMachines = append(candidateForUpdateMachines, machine)
 		}
 	}
 
 	// Get readyForDrain count of machines from the machine set randomly.
-	if len(machinesWithoutSelectedForUpdate) > int(readyForDrain) {
-		return machinesWithoutSelectedForUpdate[:readyForDrain], nil
+	if len(candidateForUpdateMachines) > int(readyForDrain) {
+		return candidateForUpdateMachines[:readyForDrain], nil
 	}
-	return machinesWithoutSelectedForUpdate, nil
+	return candidateForUpdateMachines, nil
 }
 
 // labelMachineSets label all the machineSets with the given label
