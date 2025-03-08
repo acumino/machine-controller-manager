@@ -492,11 +492,17 @@ func (dc *controller) labelMachinesToSelectedForUpdate(ctx context.Context, is *
 func (dc *controller) getMachinesUndergoingUpdate(oldISs []*v1alpha1.MachineSet) (int32, error) {
 	machineInUpdateProcess := int32(0)
 	for _, is := range oldISs {
-		machines, err := dc.machineLister.List(labels.SelectorFromSet(MergeStringMaps(is.Spec.Selector.MatchLabels, map[string]string{v1alpha1.LabelKeyNodeSelectedForUpdate: "true"})))
+		machines, err := dc.machineLister.List(labels.SelectorFromSet(is.Spec.Selector.MatchLabels))
 		if err != nil {
 			return 0, err
 		}
-		machineInUpdateProcess += int32(len(machines))
+
+		for _, machine := range machines {
+			cond := GetMachineCondition(machine, v1alpha1.NodeInPlaceUpdate)
+			if cond != nil && cond.Reason != v1alpha1.UpdateCandidate {
+				machineInUpdateProcess++
+			}
+		}
 	}
 
 	return machineInUpdateProcess, nil
