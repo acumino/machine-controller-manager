@@ -363,42 +363,40 @@ func (c *controller) updateNodeConditionBasedOnLabel(ctx context.Context, machin
 }
 
 func (c *controller) inPlaceUpdate(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error) {
-	if _, ok := machine.Labels[v1alpha1.LabelKeyNodeSelectedForUpdate]; ok {
-		cond, err := nodeops.GetNodeCondition(ctx, c.targetCoreClient, getNodeName(machine), v1alpha1.NodeInPlaceUpdate)
-		if err != nil {
-			return machineutils.ShortRetry, err
+	cond, err := nodeops.GetNodeCondition(ctx, c.targetCoreClient, getNodeName(machine), v1alpha1.NodeInPlaceUpdate)
+	if err != nil {
+		return machineutils.ShortRetry, err
+	}
+
+	if cond != nil {
+		// if the condition is present and the reason is selected for update then drain the node
+		if cond.Reason == v1alpha1.SelectedForUpdate {
+			retry, err := c.drainNodeForInPlace(ctx, machine)
+			if err != nil {
+				return retry, err
+			}
+
+			// if the node is drained successfully then fetch the node condition again
+			cond, err = nodeops.GetNodeCondition(ctx, c.targetCoreClient, getNodeName(machine), v1alpha1.NodeInPlaceUpdate)
+			if err != nil {
+				return machineutils.ShortRetry, err
+			}
 		}
 
-		if cond != nil {
-			// if the condition is present and the reason is selected for update then drain the node
-			if cond.Reason == v1alpha1.SelectedForUpdate {
-				retry, err := c.drainNodeForInPlace(ctx, machine)
-				if err != nil {
-					return retry, err
-				}
-
-				// if the node is drained successfully then fetch the node condition again
-				cond, err = nodeops.GetNodeCondition(ctx, c.targetCoreClient, getNodeName(machine), v1alpha1.NodeInPlaceUpdate)
-				if err != nil {
-					return machineutils.ShortRetry, err
-				}
+		// if the condition is present and the reason is drain successful then the node is ready for update
+		if cond.Reason == v1alpha1.DrainSuccessful {
+			cond.Reason = v1alpha1.ReadyForUpdate
+			cond.LastTransitionTime = metav1.Now()
+			cond.Message = "Node is ready for in-place update"
+			if err := nodeops.AddOrUpdateConditionsOnNode(ctx, c.targetCoreClient, getNodeName(machine), *cond); err != nil {
+				return machineutils.ShortRetry, err
 			}
-
-			// if the condition is present and the reason is drain successful then the node is ready for update
-			if cond.Reason == v1alpha1.DrainSuccessful {
-				cond.Reason = v1alpha1.ReadyForUpdate
-				cond.LastTransitionTime = metav1.Now()
-				cond.Message = "Node is ready for in-place update"
-				if err := nodeops.AddOrUpdateConditionsOnNode(ctx, c.targetCoreClient, getNodeName(machine), *cond); err != nil {
-					return machineutils.ShortRetry, err
-				}
-				// give machine time for update to get applied
-				return machineutils.MediumRetry, fmt.Errorf("node %s is ready for in-place update", getNodeName(machine))
-			}
-			if cond.Reason == v1alpha1.ReadyForUpdate {
-				// give machine time for update to get applied
-				return machineutils.MediumRetry, fmt.Errorf("node %s is ready for in-place update", getNodeName(machine))
-			}
+			// give machine time for update to get applied
+			return machineutils.MediumRetry, fmt.Errorf("node %s is ready for in-place update", getNodeName(machine))
+		}
+		if cond.Reason == v1alpha1.ReadyForUpdate {
+			// give machine time for update to get applied
+			return machineutils.MediumRetry, fmt.Errorf("node %s is ready for in-place update", getNodeName(machine))
 		}
 	}
 
