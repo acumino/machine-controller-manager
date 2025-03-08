@@ -435,14 +435,14 @@ func (dc *controller) labelNodesBackingMachineSets(ctx context.Context, machineS
 
 func (dc *controller) labelMachineAndBackingNode(ctx context.Context, machine *v1alpha1.Machine, labelKey, labelValue string) error {
 	if machine.Labels[v1alpha1.NodeLabelKey] != "" {
-		labels := MergeStringMaps(machine.Labels, map[string]string{labelKey: labelValue})
-		addLabelPatch := fmt.Sprintf(`{"metadata":{"labels":{%s}}}`, labelsutil.GetFormatedLabels(labels))
+		// labels := MergeStringMaps(machine.Labels, map[string]string{labelKey: labelValue})
+		// addLabelPatch := fmt.Sprintf(`{"metadata":{"labels":{%s}}}`, labelsutil.GetFormatedLabels(labels))
 
-		klog.V(3).Infof("adding label %s to machine %s", labelKey, machine.Name)
-		if err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addLabelPatch)); err != nil {
-			klog.V(3).Infof("error while adding label %s: %s", labelKey, err)
-			return err
-		}
+		// klog.V(3).Infof("adding label %s to machine %s", labelKey, machine.Name)
+		// if err := dc.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addLabelPatch)); err != nil {
+		// 	klog.V(3).Infof("error while adding label %s: %s", labelKey, err)
+		// 	return err
+		// }
 
 		node, err := dc.nodeLister.Get(machine.Labels[v1alpha1.NodeLabelKey])
 		if err != nil {
