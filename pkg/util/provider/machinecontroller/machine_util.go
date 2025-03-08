@@ -288,6 +288,8 @@ func (c *controller) updateNodeConditionBasedOnLabel(ctx context.Context, machin
 
 	if _, ok := nodeCopy.Labels[v1alpha1.LabelKeyNodeCandidateForUpdate]; ok {
 		_, ok := nodeCopy.Labels[v1alpha1.LabelKeyNodeUpdateResult]
+		// if the in-place condition is nil or the update was successful and no update result label is present
+		// add or update the in-place update condition to indicate the node is a candidate for update
 		if inPlaceCond == nil || (inPlaceCond.Reason == v1alpha1.UpdateSuccessful && !ok) {
 			nodeCopy = nodeops.AddOrUpdateCondition(nodeCopy, v1.NodeCondition{
 				Type:               v1alpha1.NodeInPlaceUpdate,
