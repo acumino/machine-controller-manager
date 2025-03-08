@@ -239,22 +239,27 @@ func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs 
 
 		klog.V(3).Infof("machine in old machine set %s: %d", is.Name, len(machines))
 
-		// select the nodes which has been updated successfully
-		nodes, err := dc.nodeLister.List(labels.SelectorFromSet(map[string]string{v1alpha1.LabelKeyNodeUpdateResult: v1alpha1.LabelValueNodeUpdateSuccessful}))
-		if err != nil {
-			return false, err
-		}
-
-		klog.V(3).Infof("nodes with update successful %v: %d", nodes, len(nodes))
-
-		for _, node := range nodes {
-			machine, err := getMachineFromNode(machines, node)
-			// ignore error, if machine not found for the node.
-			if err != nil {
+		for _, machine := range machines {
+			cond := GetMachineCondition(machine, v1alpha1.NodeInPlaceUpdate)
+			if cond == nil || cond.Reason != v1alpha1.UpdateSuccessful {
 				continue
 			}
 
-			klog.V(3).Infof("found machine for updated node, machine: %s, node: %s", machine.Name, node.Name)
+			klog.V(3).Infof("transferring machine %s to new machine set %s", machine.Name, newIS.Name)
+
+			nodeName, ok := machine.Labels[v1alpha1.NodeLabelKey]
+			if !ok {
+				return addedNewReplicasCount > 0, fmt.Errorf("node label not found for machine %s", machine.Name)
+			}
+
+			node, err := dc.nodeLister.Get(nodeName)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					klog.Warningf("Node %s not found for machine %s", nodeName, machine.Name)
+					continue
+				}
+				return addedNewReplicasCount > 0, fmt.Errorf("failed to get node %s for machine %s: %w", nodeName, machine.Name, err)
+			}
 
 			// removes labels not present in newIS so that the machine is not selected by the old machine set
 			machineNewLabels := MergeStringMaps(MergeWithOverwriteAndFilter(machine.Labels, is.Spec.Selector.MatchLabels, newIS.Spec.Selector.MatchLabels), map[string]string{v1alpha1.LabelKeyNodeUpdateResult: v1alpha1.LabelValueNodeUpdateSuccessful})
