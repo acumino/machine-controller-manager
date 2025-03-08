@@ -761,7 +761,11 @@ func filterMachinesWithUpdateSuccessfulLabel(machines []*v1alpha1.Machine) []*v1
 	machinesWithUpdateSuccessfulLabel := make([]*v1alpha1.Machine, 0)
 	for _, machine := range machines {
 		if labelValue, ok := machine.Labels[v1alpha1.LabelKeyNodeUpdateResult]; ok && labelValue == v1alpha1.LabelValueNodeUpdateSuccessful {
-			machinesWithUpdateSuccessfulLabel = append(machinesWithUpdateSuccessfulLabel, machine)
+			cond := GetMachineCondition(machine, v1alpha1.NodeInPlaceUpdate)
+			// only consider machines with the update successful condition
+			if cond != nil && cond.Reason == v1alpha1.UpdateSuccessful {
+				machinesWithUpdateSuccessfulLabel = append(machinesWithUpdateSuccessfulLabel, machine)
+			}
 		}
 	}
 
