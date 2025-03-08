@@ -287,7 +287,8 @@ func (c *controller) updateNodeConditionBasedOnLabel(ctx context.Context, machin
 	updateCondition := false
 
 	if _, ok := nodeCopy.Labels[v1alpha1.LabelKeyNodeCandidateForUpdate]; ok {
-		if inPlaceCond == nil || inPlaceCond.Reason == v1alpha1.UpdateSuccessful {
+		_, ok := nodeCopy.Labels[v1alpha1.LabelKeyNodeUpdateResult]
+		if inPlaceCond == nil || (inPlaceCond.Reason == v1alpha1.UpdateSuccessful && !ok) {
 			nodeCopy = nodeops.AddOrUpdateCondition(nodeCopy, v1.NodeCondition{
 				Type:               v1alpha1.NodeInPlaceUpdate,
 				Status:             v1.ConditionTrue,
@@ -299,11 +300,7 @@ func (c *controller) updateNodeConditionBasedOnLabel(ctx context.Context, machin
 		}
 
 		if !updateCondition {
-			if _, ok := nodeCopy.Labels[v1alpha1.LabelKeyNodeSelectedForUpdate]; !ok {
-				if inPlaceCond != nil && inPlaceCond.Reason == v1alpha1.UpdateCandidate {
-					return machineutils.LongRetry, nil
-				}
-			} else {
+			if _, ok := nodeCopy.Labels[v1alpha1.LabelKeyNodeSelectedForUpdate]; ok {
 				if inPlaceCond.Reason == v1alpha1.UpdateCandidate {
 					nodeCopy = nodeops.AddOrUpdateCondition(nodeCopy, v1.NodeCondition{
 						Type:               v1alpha1.NodeInPlaceUpdate,
@@ -317,35 +314,35 @@ func (c *controller) updateNodeConditionBasedOnLabel(ctx context.Context, machin
 					// node still not has been drained
 					return machineutils.MediumRetry, nil
 				}
+			}
+		}
 
-				if !updateCondition {
-					if nodeCopy.Labels[v1alpha1.LabelKeyNodeUpdateResult] == v1alpha1.LabelValueNodeUpdateSuccessful {
-						if inPlaceCond != nil && inPlaceCond.Reason == v1alpha1.UpdateSuccessful {
-							return machineutils.LongRetry, nil
-						}
-						nodeCopy = nodeops.AddOrUpdateCondition(nodeCopy, v1.NodeCondition{
-							Type:               v1alpha1.NodeInPlaceUpdate,
-							Status:             v1.ConditionTrue,
-							LastTransitionTime: metav1.Now(),
-							Reason:             v1alpha1.UpdateSuccessful,
-							Message:            "Node in-place update successful",
-						})
-						updateCondition = true
-					} else if nodeCopy.Labels[v1alpha1.LabelKeyNodeUpdateResult] == v1alpha1.LabelValueNodeUpdateFailed {
-						if inPlaceCond != nil && inPlaceCond.Reason == v1alpha1.UpdateFailed {
-							return machineutils.LongRetry, nil
-						}
-
-						nodeCopy = nodeops.AddOrUpdateCondition(nodeCopy, v1.NodeCondition{
-							Type:               v1alpha1.NodeInPlaceUpdate,
-							Status:             v1.ConditionTrue,
-							LastTransitionTime: metav1.Now(),
-							Reason:             v1alpha1.UpdateFailed,
-							Message:            fmt.Sprintf("Node in-place update failed: %v", nodeCopy.Annotations[v1alpha1.AnnotationKeyMachineUpdateFailedReason]),
-						})
-						updateCondition = true
-					}
+		if !updateCondition {
+			if nodeCopy.Labels[v1alpha1.LabelKeyNodeUpdateResult] == v1alpha1.LabelValueNodeUpdateSuccessful {
+				if inPlaceCond != nil && inPlaceCond.Reason == v1alpha1.UpdateSuccessful {
+					return machineutils.LongRetry, nil
 				}
+				nodeCopy = nodeops.AddOrUpdateCondition(nodeCopy, v1.NodeCondition{
+					Type:               v1alpha1.NodeInPlaceUpdate,
+					Status:             v1.ConditionTrue,
+					LastTransitionTime: metav1.Now(),
+					Reason:             v1alpha1.UpdateSuccessful,
+					Message:            "Node in-place update successful",
+				})
+				updateCondition = true
+			} else if nodeCopy.Labels[v1alpha1.LabelKeyNodeUpdateResult] == v1alpha1.LabelValueNodeUpdateFailed {
+				if inPlaceCond != nil && inPlaceCond.Reason == v1alpha1.UpdateFailed {
+					return machineutils.LongRetry, nil
+				}
+
+				nodeCopy = nodeops.AddOrUpdateCondition(nodeCopy, v1.NodeCondition{
+					Type:               v1alpha1.NodeInPlaceUpdate,
+					Status:             v1.ConditionTrue,
+					LastTransitionTime: metav1.Now(),
+					Reason:             v1alpha1.UpdateFailed,
+					Message:            fmt.Sprintf("Node in-place update failed: %v", nodeCopy.Annotations[v1alpha1.AnnotationKeyMachineUpdateFailedReason]),
+				})
+				updateCondition = true
 			}
 		}
 	}
