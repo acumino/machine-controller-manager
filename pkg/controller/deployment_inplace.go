@@ -214,6 +214,16 @@ func (dc *controller) syncMachineSets(ctx context.Context, oldISs []*v1alpha1.Ma
 	return nil
 }
 
+// GetMachineCondition returns a condition matching the type from the machines's status
+func GetMachineCondition(machine *v1alpha1.Machine, conditionType v1.NodeConditionType) *v1.NodeCondition {
+	for _, cond := range machine.Status.Conditions {
+		if cond.Type == conditionType {
+			return &cond
+		}
+	}
+	return nil
+}
+
 func (dc *controller) reconcileNewMachineSetInPlace(ctx context.Context, oldISs []*v1alpha1.MachineSet, newIS *v1alpha1.MachineSet, deployment *v1alpha1.MachineDeployment) (bool, error) {
 	if (newIS.Spec.Replicas) == (deployment.Spec.Replicas) {
 		// Scaling not required.
