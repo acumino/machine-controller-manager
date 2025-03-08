@@ -151,8 +151,6 @@ func (dc *controller) syncMachineSets(ctx context.Context, oldISs []*v1alpha1.Ma
 	// remove all the label from the machines related to the inplace update.
 	for _, machine := range machinesWithUpdateSuccessfulLabel {
 		labelsToRemove := []string{
-			v1alpha1.LabelKeyNodeCandidateForUpdate,
-			v1alpha1.LabelKeyNodeSelectedForUpdate,
 			v1alpha1.LabelKeyNodeUpdateResult,
 		}
 
@@ -180,18 +178,20 @@ func (dc *controller) syncMachineSets(ctx context.Context, oldISs []*v1alpha1.Ma
 			return fmt.Errorf("failed to get node %s: %w", nodeName, err)
 		}
 
-		cond := nodeops.GetCondition(node, v1alpha1.NodeInPlaceUpdate)
-		if cond != nil && cond.Reason == v1alpha1.UpdateSuccessful {
-			nodeLabels := node.Labels
-			delete(nodeLabels, v1alpha1.LabelKeyNodeCandidateForUpdate)
-			delete(nodeLabels, v1alpha1.LabelKeyNodeSelectedForUpdate)
-			delete(nodeLabels, v1alpha1.LabelKeyNodeUpdateResult)
-			delete(node.Annotations, v1alpha1.AnnotationKeyMachineUpdateFailedReason)
-			node.ObjectMeta.Labels = nodeLabels
-			node.Spec.Unschedulable = false
-			_, err = dc.targetCoreClient.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
-			if err != nil {
-				return fmt.Errorf("failed to uncordon the node %s: %w", node.Name, err)
+		if labelValue, ok := node.Labels[v1alpha1.LabelKeyNodeUpdateResult]; ok && labelValue == v1alpha1.LabelValueNodeUpdateSuccessful {
+			cond := nodeops.GetCondition(node, v1alpha1.NodeInPlaceUpdate)
+			if cond != nil && cond.Reason == v1alpha1.UpdateSuccessful {
+				nodeLabels := node.Labels
+				delete(nodeLabels, v1alpha1.LabelKeyNodeCandidateForUpdate)
+				delete(nodeLabels, v1alpha1.LabelKeyNodeSelectedForUpdate)
+				delete(nodeLabels, v1alpha1.LabelKeyNodeUpdateResult)
+				delete(node.Annotations, v1alpha1.AnnotationKeyMachineUpdateFailedReason)
+				node.ObjectMeta.Labels = nodeLabels
+				node.Spec.Unschedulable = false
+				_, err = dc.targetCoreClient.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+				if err != nil {
+					return fmt.Errorf("failed to uncordon the node %s: %w", node.Name, err)
+				}
 			}
 		}
 	}
